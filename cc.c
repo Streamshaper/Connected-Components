@@ -1,26 +1,49 @@
 #include <stdio.h>
+#include <string.h>
 #include "cca.h"
+#include "cs.h"
 
 int n_nodes = 12;
 int n_edges = 16;
 
 int main (int argc, char* argv[])
 {
-    int labels [n_nodes];  // ID of each node
-    int active [n_nodes];  // Active nodes
-    int next_active [n_nodes]; // Nodes that need to be woken up
-// Maybe use bool
+    int labels [n_nodes];  // label of each node
+    int active [n_nodes];  // active nodes
+    int next_active [n_nodes]; // nodes that need to be woken up
     int ind_ptr [n_edges];
     int indices [n_edges];
-    int neigh_labels [n_nodes]; // n_nodes-1 for no self-loops
-    int min_label;
-    initialize_labels (labels, active, n_nodes);
+    int neigh_labels [n_nodes]; // neighbours' labels for a given node
+    int min_label, start, end;
     int iteration = 0;
     int changed = 0;
-    int start, end;
+
+    initialize_labels (labels, active, n_nodes);
+    //initialize_csr_matrix (ind_ptr, indices);
+
+    FILE *f = fopen ("matrix.mtx", "r");
+    cs *A = cs_load (f);
+    fclose (f);
+
+    cs *A_csc = cs_compress(A);
+    cs_spfree(A);
+
+    cs *A_csr = cs_transpose(A_csc, 1);
+    cs_spfree(A_csc);
 
 
-    initialize_csr_matrix (ind_ptr, indices);
+    int nrows = A_csr->m;
+    int nnz = A_csr->p[nrows];
+
+    int *row_ptr = malloc ((nrows+1) * sizeof(int));
+    int *col_ind = malloc (nnz * sizeof(int));
+
+    memcpy(row_ptr, A_csr->p, (nrows+1)*sizeof(int));
+    memcpy(col_ind, A_csr->i, nnz*sizeof(int));
+
+    printf ("First and last Element: %d, %d", row_ptr[0], row_ptr[nrows]);
+
+    return 0;
 
     while (1)
     {
@@ -57,6 +80,10 @@ int main (int argc, char* argv[])
     }
 
     printf ("UC: %d", unique_elements(labels));
+
+    cs_spfree (A_csr);
+
+    return 0;
 }
 
 void initialize_csr_matrix (int* ind_ptr, int* indices)
