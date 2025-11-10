@@ -1,87 +1,125 @@
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "cca.h"
 #include "cs.h"
 
+// -fdiagnostics-color=always -g -I. cc.c Source/*.c -lm -O3 -o test
+
 int n_nodes = 12;
-int n_edges = 16;
+int n_elements = 16;
 
 int main (int argc, char* argv[])
 {
-    int labels [n_nodes];  // label of each node
-    int active [n_nodes];  // active nodes
-    int next_active [n_nodes]; // nodes that need to be woken up
-    int ind_ptr [n_edges];
-    int indices [n_edges];
-    int neigh_labels [n_nodes]; // neighbours' labels for a given node
-    int min_label, start, end;
-    int iteration = 0;
-    int changed = 0;
-
-    initialize_labels (labels, active, n_nodes);
-    //initialize_csr_matrix (ind_ptr, indices);
-
-    FILE *f = fopen ("matrix.mtx", "r");
+    //========================================//
+    FILE *f = fopen ("matrix_fixed.mtx", "r");
+    if (!f) 
+    {
+        perror("Error opening file");
+        return 1;
+    }
     cs *A = cs_load (f);
+
     fclose (f);
+    if (!A)
+    {
+        fprintf(stderr, "Error loading matrix.\n");
+        return 1;
+    }
 
     cs *A_csc = cs_compress(A);
     cs_spfree(A);
 
-    cs *A_csr = cs_transpose(A_csc, 1);
-    cs_spfree(A_csc);
+    n_nodes = A_csc->n;
+    n_elements = A_csc->p[n_nodes];
 
+    int *ind_ptr = malloc ((n_nodes+1) * sizeof(int)); //row_ptr
+    int *indices = malloc (n_elements * sizeof(int));   //col_ind
 
-    int nrows = A_csr->m;
-    int nnz = A_csr->p[nrows];
+    memcpy(ind_ptr, A_csc->p, (n_nodes+1)*sizeof(int));
+    memcpy(indices, A_csc->i, n_elements*sizeof(int));
 
-    int *row_ptr = malloc ((nrows+1) * sizeof(int));
-    int *col_ind = malloc (nnz * sizeof(int));
+    cs_spfree (A_csc);
+    
+    printf ("You've got %d nodes and %d elements in total.\n", n_nodes, n_elements);
 
-    memcpy(row_ptr, A_csr->p, (nrows+1)*sizeof(int));
-    memcpy(col_ind, A_csr->i, nnz*sizeof(int));
+    //========================================//
+    int labels [n_nodes];  // label of each node
+    int active [n_nodes];  // active nodes
+    int next_active [n_nodes]; // nodes that need to be woken up
+    int neigh_labels [n_nodes]; // neighbours' labels for a given node
+    int min_label, start, end;
+    int n_neigh = 0;
+    int iteration = 0;
+    int changed = 0;
 
-    printf ("First and last Element: %d, %d", row_ptr[0], row_ptr[nrows]);
+    clock_t start_t;
+    clock_t end_t;
+    clock_t iter_t;
+    clock_t rate_t = clock();
+    initialize_labels (labels, active, n_nodes);
+    //initialize_csr_matrix (ind_ptr, indices);
 
-    return 0;
+    //Saved me: awk '!/^%/ {if (NF==2) print $1, $2, 1; else print $0}' matrix.mtx > matrix_fixed.mtx
+    //free the memory afterwards
 
     while (1)
     {
         iteration++;
         changed = 0;
-        reinitialize_matrices (next_active, n_nodes);
-
+        reinitialize_matrices(next_active, n_nodes);  // once per iteration, compare with iteration number don't initialize (idea)
+        rate_t = clock();
         for (int i=0; i<n_nodes; i++)
-            if (active[i] = 1)
+        {
+            iter_t = 0;
+            start_t = clock();
+            if (active[i] != 1) continue;
+
+            start = ind_ptr[i];
+            end   = ind_ptr[i+1];
+            if (start == end) continue;
+            end_t = clock();
+            iter_t += (end_t-start_t);
+            //if (i%10000 == 0) printf ("Ttstart: %lf || ", (double)(end_t-start_t)/CLOCKS_PER_SEC);
+
+            min_label = labels[indices[start]];
+
+            for (int k = start+1; k < end; k++)
+                if (labels[indices[k]] < min_label)
+                    min_label = labels[indices[k]];
+            
+            start_t = clock();
+            iter_t += (start_t-end_t);
+            //if (i%10000 == 0) printf ("Ttmin: %lf || ", (double)(start_t-end_t)/CLOCKS_PER_SEC);
+
+            if (min_label < labels[i])
             {
-                reinitialize_neighboors (neigh_labels, n_nodes);
-                start = ind_ptr[i];
-                end = ind_ptr [i+1];
-
-                if (start == end) continue;
-
-                for (int k=start,l=0; k<end; k++, l++)
-                    neigh_labels [l] = labels[indices[k]];
-                
-                min_label = get_min_from_array (neigh_labels, n_nodes);
-                
-                if (min_label < labels[i])
-                {
-                    labels[i] = min_label;
-                    changed = 1;
-                    for (int k=start; k<end; k++)
-                        next_active[indices[k]] = 1;
-                }                
+                labels[i] = min_label;
+                changed = 1;
+                for (int k=start; k<end; k++)
+                    next_active[indices[k]] = 1;
             }
 
-        print_update (labels, next_active, iteration);
-        if (changed == 0) break;
-        update_active (active, next_active, n_nodes);
+            end_t = clock();
+            iter_t += (end_t-start_t);
+            if (i%5000 == 0)
+            {
+                printf ("Ttupdate: %lf || Ttotal: %lf || %.1f%% || Rate %lfs for 5000 nodes.\n", (double)(end_t-start_t)/CLOCKS_PER_SEC, 
+                                        (double)(iter_t)/CLOCKS_PER_SEC, 100.0*i/n_nodes,
+                                        (double)(clock()-rate_t)/CLOCKS_PER_SEC);
+                rate_t = clock();
+            }
+        }
+
+        print_update(labels, next_active, iteration);  // one print per iteration
+
+        if (!changed) break;
+        update_active(active, next_active, n_nodes);
+        printf ("UC: %d\n", unique_elements(labels));
     }
 
-    printf ("UC: %d", unique_elements(labels));
 
-    cs_spfree (A_csr);
+    printf ("UC: %d", unique_elements(labels));
 
     return 0;
 }
@@ -89,11 +127,11 @@ int main (int argc, char* argv[])
 void initialize_csr_matrix (int* ind_ptr, int* indices)
 {
     int temp_ptr [] = {0, 2, 3, 5, 7, 9, 10, 11, 12, 14, 15, 16, 16};
-    for (int q=0; q<n_edges; q++)
+    for (int q=0; q<n_elements; q++)
         ind_ptr[q] = temp_ptr[q];
 
     int temp_idx [] = {1, 4, 0, 7, 8, 4, 10, 0, 3, 6, 5, 2, 2, 9, 8, 3};
-    for (int q=0; q<n_edges; q++)
+    for (int q=0; q<n_elements; q++)
         indices[q] = temp_idx[q];
 }
 
@@ -134,27 +172,45 @@ int get_min_from_array (int* array, int array_size)
     return min; // If 0, no neighboors. Error. Should have been start == end.
 }
 
+int get_elements_from_array (int* array, int array_size)
+{
+    int sum = 0;
+
+    for (int q=0; q<array_size; q++)
+        if (array[q] != 0) 
+            sum++;
+
+    printf("You know, it's %d", sum);
+    return sum;
+}
+
 void update_active (int* active, int* next_active, int nodes)
 {
-    for (int t=0; t<nodes; t++)
-        active[t] = next_active[t];
+    /*for (int t=0; t<nodes; t++)
+        active[t] = next_active[t];*/
+
+    int* temp = active;
+    active = next_active;
+    next_active = temp;
 }
 
 void print_update (int* labels, int* still_active_labels, int iter)
 {
-    printf("Iteration #%d || Labels: [", iter);
+    /*printf("Iteration #%d || Labels: [", iter);
             for (int r=0; r<n_nodes; r++)
             {
                 printf ("%d", labels[r]);
                 r<n_nodes-1?printf(", "):printf("], ");
-            } 
+            } */
+    printf("Iteration: %d ||", iter);
     printf("Still Active: [");
-            for (int r=0; r<n_nodes; r++)
+            /*for (int r=0; r<n_nodes; r++)
             {
                 printf ("%d", still_active_labels[r]);
                 r<n_nodes-1?printf(", "):printf("] ,");
-            }
-            printf ("\n");
+            }*/
+    printf("%d nodes. ] ", get_elements_from_array(still_active_labels, n_nodes));
+    printf ("\n");
 }
 
 int unique_elements (int* labels)
