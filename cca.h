@@ -11,8 +11,6 @@ void reinitialize_matrices (int* next_active, int nodes);
 
 void reinitialize_neighboors (int* neigh_labels, int nodes);
 
-void update_active (int* active, int* next_active, int nodes);
-
 void print_update (int* labels, int* still_active_labels, int iter);
 
 int unique_elements (int* labels);

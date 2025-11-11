@@ -41,25 +41,26 @@ int main (int argc, char* argv[])
 
     cs_spfree (A_csc);
     
+   //initialize_csr_matrix (ind_ptr, indices);
+
     printf ("You've got %d nodes and %d elements in total.\n", n_nodes, n_elements);
 
     //========================================//
-    int labels [n_nodes];  // label of each node
-    int active [n_nodes];  // active nodes
-    int next_active [n_nodes]; // nodes that need to be woken up
-    int neigh_labels [n_nodes]; // neighbours' labels for a given node
+    int *labels = malloc (n_nodes*sizeof(int));  // label of each node
+    int *active = malloc (n_nodes*sizeof(int));  // active nodes
+    int *next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
+    int *neigh_labels = malloc (n_nodes*sizeof(int)); // neighbours' labels for a given node
     int min_label, start, end;
     int n_neigh = 0;
     int iteration = 0;
     int changed = 0;
 
-    clock_t start_t;
+    clock_t start_t = clock();
     clock_t end_t;
-    clock_t iter_t;
-    clock_t rate_t = clock();
+    clock_t check1 = clock();
+    clock_t check2;
     initialize_labels (labels, active, n_nodes);
-    //initialize_csr_matrix (ind_ptr, indices);
-
+    
     //Saved me: awk '!/^%/ {if (NF==2) print $1, $2, 1; else print $0}' matrix.mtx > matrix_fixed.mtx
     //free the memory afterwards
 
@@ -68,29 +69,19 @@ int main (int argc, char* argv[])
         iteration++;
         changed = 0;
         reinitialize_matrices(next_active, n_nodes);  // once per iteration, compare with iteration number don't initialize (idea)
-        rate_t = clock();
         for (int i=0; i<n_nodes; i++)
         {
-            iter_t = 0;
-            start_t = clock();
             if (active[i] != 1) continue;
 
             start = ind_ptr[i];
             end   = ind_ptr[i+1];
             if (start == end) continue;
-            end_t = clock();
-            iter_t += (end_t-start_t);
-            //if (i%10000 == 0) printf ("Ttstart: %lf || ", (double)(end_t-start_t)/CLOCKS_PER_SEC);
 
             min_label = labels[indices[start]];
 
             for (int k = start+1; k < end; k++)
                 if (labels[indices[k]] < min_label)
                     min_label = labels[indices[k]];
-            
-            start_t = clock();
-            iter_t += (start_t-end_t);
-            //if (i%10000 == 0) printf ("Ttmin: %lf || ", (double)(start_t-end_t)/CLOCKS_PER_SEC);
 
             if (min_label < labels[i])
             {
@@ -100,26 +91,36 @@ int main (int argc, char* argv[])
                     next_active[indices[k]] = 1;
             }
 
-            end_t = clock();
-            iter_t += (end_t-start_t);
-            if (i%5000 == 0)
+            if (i%10000 == 0)
             {
-                printf ("Ttupdate: %lf || Ttotal: %lf || %.1f%% || Rate %lfs for 5000 nodes.\n", (double)(end_t-start_t)/CLOCKS_PER_SEC, 
-                                        (double)(iter_t)/CLOCKS_PER_SEC, 100.0*i/n_nodes,
-                                        (double)(clock()-rate_t)/CLOCKS_PER_SEC);
-                rate_t = clock();
+                end_t = clock();
+                check2 = clock();
+                printf ("Iteration completion: %.1f%% || Time elapsed: %.1lf seconds || Speed: %.1lf nodes/second\n", 100.0*i/n_nodes,(double)(end_t-start_t)/CLOCKS_PER_SEC, 
+                                                        (double)10000*CLOCKS_PER_SEC/(check2-check1));
+                check1 = clock ();
             }
         }
 
         print_update(labels, next_active, iteration);  // one print per iteration
 
         if (!changed) break;
-        update_active(active, next_active, n_nodes);
+        
+        int* temp = active;
+        active = next_active;
+        next_active = temp;
+
         printf ("UC: %d\n", unique_elements(labels));
     }
 
 
-    printf ("UC: %d", unique_elements(labels));
+    printf ("End, UC: %d", unique_elements(labels));
+
+    free(ind_ptr);
+    free(indices);
+    free(active);
+    free(next_active);
+    free(labels);
+    free(neigh_labels);
 
     return 0;
 }
@@ -180,18 +181,7 @@ int get_elements_from_array (int* array, int array_size)
         if (array[q] != 0) 
             sum++;
 
-    printf("You know, it's %d", sum);
     return sum;
-}
-
-void update_active (int* active, int* next_active, int nodes)
-{
-    /*for (int t=0; t<nodes; t++)
-        active[t] = next_active[t];*/
-
-    int* temp = active;
-    active = next_active;
-    next_active = temp;
 }
 
 void print_update (int* labels, int* still_active_labels, int iter)
