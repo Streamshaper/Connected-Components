@@ -14,7 +14,7 @@ int* ind_ptr;
 
 int main (int argc, char* argv[])
 {
-    open_matrix ("matrix.mat");
+    open_matrix ("matrix.mat"); // Check, missing free
 
     int *labels = malloc (n_nodes*sizeof(int));  // label of each node
     int *active = malloc (n_nodes*sizeof(int));  // active nodes
@@ -25,12 +25,11 @@ int main (int argc, char* argv[])
     int iteration = 0;
     int changed = 0;
 
+    clock_t zero_t = clock();
     clock_t start_t = clock();
     clock_t end_t;
-    clock_t zero_t = clock();
-    initialize_labels (labels, active, n_nodes);
     
-    //free the memory afterwards
+    initialize_labels (labels, active, n_nodes);
 
     while (1)
     {
@@ -125,20 +124,6 @@ void reinitialize_neighboors (int* neigh_labels, int nodes)
 {
     for (int p=0; p<nodes; p++)
         neigh_labels[p] = 0;
-}
-
-int get_min_from_array (int* array, int array_size)
-{
-    int min = array[0];
-    for (int t=0; t<array_size; t++)
-    {
-        if (array[t] == 0)
-            break;
-
-        if (array[t] < min) min = array[t];
-    }
-
-    return min; // If 0, no neighboors. Error. Should have been start == end.
 }
 
 int get_elements_from_array (int* array, int array_size)

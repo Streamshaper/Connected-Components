@@ -3,8 +3,6 @@
 
 void initialize_labels (int* labels, int* active, int nodes);
 
-int get_min_from_array (int* array, int array_size);
-
 void initialize_csr_matrix (int* ind_ptr, int* indices);
 
 void reinitialize_matrices (int* next_active, int nodes);
