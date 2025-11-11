@@ -1,51 +1,22 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <matio.h>
 #include "cca.h"
 #include "cs.h"
 
-// -fdiagnostics-color=always -g -I. cc.c Source/*.c -lm -O3 -o test
+//Compile with: gcc -I. cc.c Source/*.c -lm -lmatio -O3 -o test
 
-int n_nodes = 12;
-int n_elements = 16;
+int n_nodes;
+int n_elements;
+int* indices;
+int* ind_ptr;
 
 int main (int argc, char* argv[])
 {
-    //========================================//
-    FILE *f = fopen ("matrix_fixed.mtx", "r");
-    if (!f) 
-    {
-        perror("Error opening file");
-        return 1;
-    }
-    cs *A = cs_load (f);
+    open_matrix ("com-LiveJournal.mat");
 
-    fclose (f);
-    if (!A)
-    {
-        fprintf(stderr, "Error loading matrix.\n");
-        return 1;
-    }
-
-    cs *A_csc = cs_compress(A);
-    cs_spfree(A);
-
-    n_nodes = A_csc->n;
-    n_elements = A_csc->p[n_nodes];
-
-    int *ind_ptr = malloc ((n_nodes+1) * sizeof(int)); //row_ptr
-    int *indices = malloc (n_elements * sizeof(int));   //col_ind
-
-    memcpy(ind_ptr, A_csc->p, (n_nodes+1)*sizeof(int));
-    memcpy(indices, A_csc->i, n_elements*sizeof(int));
-
-    cs_spfree (A_csc);
-    
-   //initialize_csr_matrix (ind_ptr, indices);
-
-    printf ("You've got %d nodes and %d elements in total.\n", n_nodes, n_elements);
-
-    //========================================//
     int *labels = malloc (n_nodes*sizeof(int));  // label of each node
     int *active = malloc (n_nodes*sizeof(int));  // active nodes
     int *next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
@@ -57,18 +28,16 @@ int main (int argc, char* argv[])
 
     clock_t start_t = clock();
     clock_t end_t;
-    clock_t check1 = clock();
-    clock_t check2;
+    clock_t zero_t = clock();
     initialize_labels (labels, active, n_nodes);
     
-    //Saved me: awk '!/^%/ {if (NF==2) print $1, $2, 1; else print $0}' matrix.mtx > matrix_fixed.mtx
     //free the memory afterwards
 
     while (1)
     {
         iteration++;
         changed = 0;
-        reinitialize_matrices(next_active, n_nodes);  // once per iteration, compare with iteration number don't initialize (idea)
+
         for (int i=0; i<n_nodes; i++)
         {
             if (active[i] != 1) continue;
@@ -91,17 +60,15 @@ int main (int argc, char* argv[])
                     next_active[indices[k]] = 1;
             }
 
-            if (i%10000 == 0)
+            if (i%200000 == 0)
             {
                 end_t = clock();
-                check2 = clock();
-                printf ("Iteration completion: %.1f%% || Time elapsed: %.1lf seconds || Speed: %.1lf nodes/second\n", 100.0*i/n_nodes,(double)(end_t-start_t)/CLOCKS_PER_SEC, 
-                                                        (double)10000*CLOCKS_PER_SEC/(check2-check1));
-                check1 = clock ();
+                printf ("Iteration completion: %.1f%% || Time elapsed: %.1lf seconds\n", 
+                    100.0*i/n_nodes,(double)(end_t-start_t)/CLOCKS_PER_SEC);
             }
         }
 
-        print_update(labels, next_active, iteration);  // one print per iteration
+        print_update(labels, next_active, iteration);
 
         if (!changed) break;
         
@@ -109,11 +76,13 @@ int main (int argc, char* argv[])
         active = next_active;
         next_active = temp;
 
+        reinitialize_matrices(next_active, n_nodes);  // once per iteration, compare with iteration number don't initialize (idea)
+
         printf ("UC: %d\n", unique_elements(labels));
     }
 
 
-    printf ("End, UC: %d", unique_elements(labels));
+    printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), (double)(clock()-zero_t)/CLOCKS_PER_SEC);
 
     free(ind_ptr);
     free(indices);
@@ -186,27 +155,15 @@ int get_elements_from_array (int* array, int array_size)
 
 void print_update (int* labels, int* still_active_labels, int iter)
 {
-    /*printf("Iteration #%d || Labels: [", iter);
-            for (int r=0; r<n_nodes; r++)
-            {
-                printf ("%d", labels[r]);
-                r<n_nodes-1?printf(", "):printf("], ");
-            } */
-    printf("Iteration: %d ||", iter);
-    printf("Still Active: [");
-            /*for (int r=0; r<n_nodes; r++)
-            {
-                printf ("%d", still_active_labels[r]);
-                r<n_nodes-1?printf(", "):printf("] ,");
-            }*/
-    printf("%d nodes. ] ", get_elements_from_array(still_active_labels, n_nodes));
+    printf("Iteration: %d || ", iter);
+    printf("Still Active: %d nodes.", get_elements_from_array(still_active_labels, n_nodes));
     printf ("\n");
 }
 
 int unique_elements (int* labels)
 {
     int sum = 0;
-    int temp[n_nodes];
+    int *temp = malloc (n_nodes*sizeof(int));
     int found = 0;
 
     temp[0] = labels[0];
@@ -234,4 +191,32 @@ int unique_elements (int* labels)
 void print_final (int* labels, int iterations)
 {
     printf("Number Of Connected Components: %d.", unique_elements(labels));
+}
+
+void open_matrix (char* name)
+{
+    mat_t *matfp = Mat_Open(name, MAT_ACC_RDONLY);
+    if (!matfp) { fprintf(stderr,"Cannot open file\n"); exit(2); }
+
+    matvar_t *problem = Mat_VarRead(matfp, "Problem");
+    if (!problem || problem->class_type != MAT_C_STRUCT) { fprintf(stderr,"Problem struct missing\n"); exit(2); }
+
+    matvar_t *Avar = Mat_VarGetStructFieldByName(problem, "A", 0);
+    if (!Avar || Avar->class_type != MAT_C_SPARSE) { fprintf(stderr,"A is not sparse\n"); exit(2); }
+
+    mat_sparse_t *A = (mat_sparse_t*)Avar->data; // Correct way to access sparse data
+    size_t m = Avar->dims[0], n = Avar->dims[1], nnz = A->nzmax;
+
+    indices = malloc (m*sizeof(int));
+    ind_ptr = malloc (n*sizeof(int));
+
+    indices = A->ir;         // row indices
+    ind_ptr = A->jc;           // column pointers
+    n_nodes = n;
+    n_elements = nnz/2;
+
+    Mat_Close(matfp);
+
+    printf ("You've got %d nodes and %d elements in total.\n", n_nodes, n_elements);
+
 }

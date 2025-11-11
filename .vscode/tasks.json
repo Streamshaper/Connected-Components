@@ -11,6 +11,7 @@
                 "${file}",
                 "Source/*.c",
                 "-lm",
+                "-lmatio",
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}"
             ],
