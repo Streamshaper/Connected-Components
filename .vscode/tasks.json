@@ -9,7 +9,6 @@
                 "-g",
                 "-I.",
                 "${file}",
-                "Source/*.c",
                 "-lm",
                 "-lmatio",
                 "-o",

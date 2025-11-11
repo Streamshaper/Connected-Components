@@ -4,9 +4,8 @@
 #include <time.h>
 #include <matio.h>
 #include "cca.h"
-#include "cs.h"
 
-//Compile with: gcc -I. cc.c Source/*.c -lm -lmatio -O3 -o test
+//Compile with: gcc -I. -lm -lmatio -O3 -o cc
 
 int n_nodes;
 int n_elements;
@@ -15,7 +14,7 @@ int* ind_ptr;
 
 int main (int argc, char* argv[])
 {
-    open_matrix ("com-LiveJournal.mat");
+    open_matrix ("matrix.mat");
 
     int *labels = malloc (n_nodes*sizeof(int));  // label of each node
     int *active = malloc (n_nodes*sizeof(int));  // active nodes
