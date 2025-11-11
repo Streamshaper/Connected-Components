@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include <matio.h>
+#include <cilk/cilk.h>
 #include "cca.h"
 
 //Compile with: gcc -I. -lm -lmatio -O3 -o cc

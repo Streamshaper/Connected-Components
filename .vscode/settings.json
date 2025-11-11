@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "cca.h": "c",
+        "cilk.h": "c"
+    }
+}
