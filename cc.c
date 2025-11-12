@@ -1,34 +1,45 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include <sys/time.h>
 #include <matio.h>
 #include <cilk/cilk.h>
 #include <stdatomic.h>
 #include "cca.h"
+#include <cilk/cilkscale.h> // Used for benchmarking
+#include <cilk/cilk_api.h>
 
-//Compile with: clang -lmatio -fopencilk -lm cc.c -O3 -o cc
+//Compile with: clang -fopencilk -lm cc.c -O3 -o cc -lmatio
+
+double wall_time() {
+    struct timeval t;
+    gettimeofday(&t, NULL);
+    return t.tv_sec + t.tv_usec * 1e-6;
+}
 
 int n_nodes;
 int n_elements;
-_Atomic int* indices;
-_Atomic int* ind_ptr;
+int* indices;
+int* ind_ptr;
 
 int main (int argc, char* argv[])
 {
-    open_matrix ("matrix.mat"); // Check, missing free
+    open_matrix ("com-LiveJournal.mat"); // Check, missing free
+    int nworkers = __cilkrts_get_nworkers();
+    printf("Running with %d Cilk workers\n", nworkers);
     _Atomic int *labels = malloc (n_nodes*sizeof(_Atomic int));  // label of each node
     _Atomic int *active = malloc (n_nodes*sizeof(_Atomic int));  // active nodes
     _Atomic int *next_active = malloc (n_nodes*sizeof(_Atomic int)); // nodes that need to be woken up
 
-    int *min_label = malloc (n_nodes*sizeof(_Atomic int));
     int n_neigh = 0;
     int iteration = 0;
     int changed = 1;
 
-    clock_t zero_t = clock();
+    double t0 = wall_time();
     
     initialize_labels (labels, active, n_nodes);
+
+    wsp_t start = wsp_getworkspan();
 
     while (changed)
     {
@@ -38,26 +49,30 @@ int main (int argc, char* argv[])
 
         cilk_for (int i=0; i<n_nodes; i++)
         {
-            if (atomic_load(&active[i]) != 1) continue;
-
+            if (atomic_load(&active[i]) == 0) continue;
+            
+            int min_label;
             int start;
             int end;
-            start = atomic_load(&ind_ptr[i]);
-            end = atomic_load(&ind_ptr[i+1]);
+            start = ind_ptr[i];
+            end = ind_ptr[i+1];
 
             if (start == end) continue;
 
-            min_label[i] = atomic_load(&labels[indices[start]]);
+            min_label = atomic_load(&labels[indices[start]]);
 
             for (int k = start+1; k < end; k++)
-                if (atomic_load(&labels[indices[k]]) < min_label[i])
-                    min_label[i] = atomic_load(&labels[indices[k]]);
-
-            if (min_label[i] < atomic_load(&labels[i]))
             {
-                atomic_store(&labels[i], min_label[i]);
+                int neigh_label = atomic_load(&labels[indices[k]]);
+                if (neigh_label < min_label)
+                    min_label = neigh_label;
+            }
+
+            if (min_label < atomic_load(&labels[i]))
+            {
+                atomic_store_explicit(&labels[i], min_label, memory_order_relaxed);
                 for (int k=start; k<end; k++)
-                    atomic_store(&next_active[indices[k]], 1);
+                    atomic_store_explicit(&next_active[indices[k]], 1, memory_order_relaxed);
             }
         }
 
@@ -72,8 +87,11 @@ int main (int argc, char* argv[])
 
     }
 
+    wsp_t end = wsp_getworkspan();
+    wsp_t elapsed = wsp_sub(end, start);
+    wsp_dump(elapsed, "my computation");
 
-    printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), (double)(clock()-zero_t)/CLOCKS_PER_SEC);
+    printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), wall_time()-t0);
 
     free(ind_ptr);
     free(indices);
@@ -159,11 +177,11 @@ void open_matrix (char* name)
     mat_sparse_t *A = (mat_sparse_t*)Avar->data; // Correct way to access sparse data
     size_t m = Avar->dims[0], n = Avar->dims[1], nnz = A->nzmax;
 
-    indices = malloc (m*sizeof(_Atomic int));
-    ind_ptr = malloc (n*sizeof(_Atomic int));
+    indices = malloc (m*sizeof(int));
+    ind_ptr = malloc (n*sizeof(int));
 
-    indices = (_Atomic int*)A->ir;         // row indices
-    ind_ptr = (_Atomic int*)A->jc;           // column pointers
+    indices = (int*)A->ir;         // row indices
+    ind_ptr = (int*)A->jc;           // column pointers
     n_nodes = n;
     n_elements = nnz/2;
 

@@ -7,6 +7,7 @@
             "command": "/usr/local/opencilk/bin/clang",
             "args": [
                 "-fopencilk",
+                "-fcilktool=cilkscale",
                 "-g",
                 "${workspaceFolder}/*.c",
                 "-o",
