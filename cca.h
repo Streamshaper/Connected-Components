@@ -11,7 +11,7 @@ void reinitialize_neighboors (int* neigh_labels, int nodes);
 
 void print_update (int* still_active_labels, int iter);
 
-int get_elements_from_array (int* array, int array_size);
+int get_elements_from_array (_Atomic int* array, int array_size);
 
 int unique_elements (_Atomic int* labels);
 

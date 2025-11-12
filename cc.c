@@ -20,8 +20,8 @@ int main (int argc, char* argv[])
 
     _Atomic int *labels = malloc (n_nodes*sizeof(_Atomic int));  // label of each node
     int *next_labels = malloc (n_nodes*sizeof(int));  // label of each node
-    int *active = malloc (n_nodes*sizeof(int));  // active nodes
-    int *next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
+    _Atomic int *active = malloc (n_nodes*sizeof(_Atomic int));  // active nodes
+    _Atomic int *next_active = malloc (n_nodes*sizeof(_Atomic int)); // nodes that need to be woken up
     int *neigh_labels = malloc (n_nodes*sizeof(int)); // neighbours' labels for a given node
     int min_label, start, end;
     int n_neigh = 0;
@@ -38,11 +38,11 @@ int main (int argc, char* argv[])
     {
         iteration++;
 
-        memset (next_active, 0, n_nodes*sizeof(int));
+        memset (next_active, 0, n_nodes*sizeof(_Atomic int));
 
         cilk_for (int i=0; i<n_nodes; i++)
         {
-            if (active[i] != 1) continue;
+            if (atomic_load(&active[i]) != 1) continue;
 
             start = ind_ptr[i];
             end   = ind_ptr[i+1];
@@ -58,7 +58,7 @@ int main (int argc, char* argv[])
             {
                 atomic_store(&labels[i], min_label);
                 for (int k=start; k<end; k++)
-                    next_active[indices[k]] = 1;
+                    atomic_store(&next_active[indices[k]], 1);
             }
 
             if (i%200000 == 0)
@@ -73,7 +73,7 @@ int main (int argc, char* argv[])
 
         print_update(next_active, iteration);
         
-        int* temp = active;
+        _Atomic int* temp = active;
         active = next_active;
         next_active = temp;
 
@@ -135,12 +135,12 @@ void reinitialize_neighboors (int* neigh_labels, int nodes)
         neigh_labels[p] = 0;
 }
 
-int get_elements_from_array (int* array, int array_size)
+int get_elements_from_array (_Atomic int* array, int array_size)
 {
     int sum = 0;
 
     for (int q=0; q<array_size; q++)
-        if (array[q] != 0) 
+        if (atomic_load(&array[q]) != 0) 
             sum++;
 
     return sum;
