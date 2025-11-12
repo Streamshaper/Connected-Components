@@ -4,9 +4,10 @@
 #include <time.h>
 #include <matio.h>
 #include <cilk/cilk.h>
+#include <stdatomic.h>
 #include "cca.h"
 
-//Compile with: gcc -I. -lm -lmatio -O3 -o cc
+//Compile with: gcc -I. -lm -lmatio -O3 -o cc, please don't!
 
 int n_nodes;
 int n_elements;
@@ -17,27 +18,29 @@ int main (int argc, char* argv[])
 {
     open_matrix ("matrix.mat"); // Check, missing free
 
-    int *labels = malloc (n_nodes*sizeof(int));  // label of each node
+    _Atomic int *labels = malloc (n_nodes*sizeof(_Atomic int));  // label of each node
+    int *next_labels = malloc (n_nodes*sizeof(int));  // label of each node
     int *active = malloc (n_nodes*sizeof(int));  // active nodes
     int *next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
     int *neigh_labels = malloc (n_nodes*sizeof(int)); // neighbours' labels for a given node
     int min_label, start, end;
     int n_neigh = 0;
     int iteration = 0;
-    int changed = 0;
+    int changed = 1;
 
     clock_t zero_t = clock();
     clock_t start_t = clock();
     clock_t end_t;
     
-    initialize_labels (labels, active, n_nodes);
+    initialize_labels (labels, next_labels, active, n_nodes);
 
-    while (1)
+    while (changed)
     {
         iteration++;
-        changed = 0;
 
-        for (int i=0; i<n_nodes; i++)
+        memset (next_active, 0, n_nodes*sizeof(int));
+
+        cilk_for (int i=0; i<n_nodes; i++)
         {
             if (active[i] != 1) continue;
 
@@ -45,16 +48,15 @@ int main (int argc, char* argv[])
             end   = ind_ptr[i+1];
             if (start == end) continue;
 
-            min_label = labels[indices[start]];
+            min_label = atomic_load(&labels[indices[start]]);
 
             for (int k = start+1; k < end; k++)
-                if (labels[indices[k]] < min_label)
-                    min_label = labels[indices[k]];
+                if (atomic_load(&labels[indices[k]]) < min_label)
+                    min_label = atomic_load(&labels[indices[k]]);
 
-            if (min_label < labels[i])
+            if (min_label < atomic_load(&labels[i]))
             {
-                labels[i] = min_label;
-                changed = 1;
+                atomic_store(&labels[i], min_label);
                 for (int k=start; k<end; k++)
                     next_active[indices[k]] = 1;
             }
@@ -67,17 +69,21 @@ int main (int argc, char* argv[])
             }
         }
 
-        print_update(labels, next_active, iteration);
+        //memcpy (labels, next_labels, n_nodes*sizeof(int));
 
-        if (!changed) break;
+        print_update(next_active, iteration);
         
         int* temp = active;
         active = next_active;
         next_active = temp;
 
-        reinitialize_matrices(next_active, n_nodes);  // once per iteration, compare with iteration number don't initialize (idea)
+        //reinitialize_matrices(next_active, n_nodes);  // once per iteration, compare with iteration number don't initialize (idea)
 
-        printf ("UC: %d\n", unique_elements(labels));
+        //printf ("UC: %d\n", unique_elements(labels));
+
+        if (get_elements_from_array(active, n_nodes) == 0)
+            changed = 0;
+
     }
 
 
@@ -88,6 +94,7 @@ int main (int argc, char* argv[])
     free(active);
     free(next_active);
     free(labels);
+    free(next_labels);
     free(neigh_labels);
 
     return 0;
@@ -104,11 +111,12 @@ void initialize_csr_matrix (int* ind_ptr, int* indices)
         indices[q] = temp_idx[q];
 }
 
-void initialize_labels (int* labels, int* active, int nodes)
+void initialize_labels (_Atomic int* labels, int* next_labels, int* active, int nodes)
 {
     for (int i=0; i<nodes; i++)
     {    
-        labels[i] = i+1;
+        atomic_init(&labels[i], i+1);
+        next_labels[i] = i+1;
         active[i] = 1;
     }
 }
@@ -138,34 +146,34 @@ int get_elements_from_array (int* array, int array_size)
     return sum;
 }
 
-void print_update (int* labels, int* still_active_labels, int iter)
+void print_update (int* still_active_labels, int iter)
 {
     printf("Iteration: %d || ", iter);
     printf("Still Active: %d nodes.", get_elements_from_array(still_active_labels, n_nodes));
     printf ("\n");
 }
 
-int unique_elements (int* labels)
+int unique_elements (_Atomic int* labels)
 {
     int sum = 0;
     int *temp = malloc (n_nodes*sizeof(int));
     int found = 0;
 
-    temp[0] = labels[0];
+    temp[0] = atomic_load(&labels[0]);
     sum++;
 
     for (int k=1; k<n_nodes; k++)
     {    
         found = 0;
         for (int l=0; l<sum; l++)
-            if (temp[l] == labels[k])
+            if (temp[l] == atomic_load(&labels[k]))
             {
                 found = 1;
                 break;
             }
         if (!found)
         {
-            temp[sum] = labels[k];
+            temp[sum] = atomic_load(&labels[k]);
             sum++;
         }
     }
@@ -173,7 +181,7 @@ int unique_elements (int* labels)
             
 }
 
-void print_final (int* labels, int iterations)
+void print_final (_Atomic int* labels, int iterations)
 {
     printf("Number Of Connected Components: %d.", unique_elements(labels));
 }

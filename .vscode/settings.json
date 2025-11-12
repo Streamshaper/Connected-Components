@@ -1,6 +1,8 @@
 {
+    "C_Cpp.errorSquiggles": "disabled",
     "files.associations": {
         "cca.h": "c",
-        "cilk.h": "c"
+        "cilk.h": "c",
     }
+    
 }

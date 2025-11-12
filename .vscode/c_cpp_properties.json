@@ -3,13 +3,23 @@
         {
             "name": "OpenCilk",
             "compilerPath": "/usr/local/opencilk/bin/clang",
+            "intelliSenseMode": "clang-x64",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "/usr/local/opencilk/lib/clang/16/include",
             ],
-            "defines": [],
+            "defines": [
+                "__cilk__"
+            ],
             "cStandard": "c11",
             "cppStandard": "c++17",
-            "intelliSenseMode": "clang-x64"
+            "browse": {
+                "path": [
+                    "${workspaceFolder}",
+                    "/usr/local/opencilk/lib/clang/16/include"
+                ],
+                "limitSymbolsToIncludedHeaders": false
+            }
         }
     ],
     "version": 4
