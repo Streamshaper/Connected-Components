@@ -1,7 +1,7 @@
 #ifndef CCA_H_INCLUDED
 #define CCA_H_INCLUDED
 
-void initialize_labels (_Atomic int* labels,_Atomic int* next_labels, _Atomic int* active, int nodes);
+void initialize_labels (_Atomic int* labels, _Atomic int* active, int nodes);
 
 void print_update (_Atomic int* still_active_labels, int iter);
 

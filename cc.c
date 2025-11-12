@@ -7,7 +7,7 @@
 #include <stdatomic.h>
 #include "cca.h"
 
-//Compile with: gcc -I. -lm -lmatio -O3 -o cc, please don't!
+//Compile with: clang -lmatio -fopencilk -lm cc.c -O3 -o cc
 
 int n_nodes;
 int n_elements;
@@ -17,9 +17,7 @@ _Atomic int* ind_ptr;
 int main (int argc, char* argv[])
 {
     open_matrix ("matrix.mat"); // Check, missing free
-
     _Atomic int *labels = malloc (n_nodes*sizeof(_Atomic int));  // label of each node
-    _Atomic int *next_labels = malloc (n_nodes*sizeof(_Atomic int));  // label of each node
     _Atomic int *active = malloc (n_nodes*sizeof(_Atomic int));  // active nodes
     _Atomic int *next_active = malloc (n_nodes*sizeof(_Atomic int)); // nodes that need to be woken up
 
@@ -29,10 +27,8 @@ int main (int argc, char* argv[])
     int changed = 1;
 
     clock_t zero_t = clock();
-    clock_t start_t = clock();
-    clock_t end_t;
     
-    initialize_labels (labels, next_labels, active, n_nodes);
+    initialize_labels (labels, active, n_nodes);
 
     while (changed)
     {
@@ -44,33 +40,32 @@ int main (int argc, char* argv[])
         {
             if (atomic_load(&active[i]) != 1) continue;
 
-            //start = ind_ptr[i];
-            //end   = ind_ptr[i+1];
-            if (atomic_load(&ind_ptr[i]) == atomic_load(&ind_ptr[i+1])) continue;
+            int start;
+            int end;
+            start = atomic_load(&ind_ptr[i]);
+            end = atomic_load(&ind_ptr[i+1]);
 
-            min_label[i] = atomic_load(&labels[indices[atomic_load(&ind_ptr[i])]]);
+            if (start == end) continue;
 
-            for (int k = atomic_load(&ind_ptr[i])+1; k < atomic_load(&ind_ptr[i+1]); k++)
+            min_label[i] = atomic_load(&labels[indices[start]]);
+
+            for (int k = start+1; k < end; k++)
                 if (atomic_load(&labels[indices[k]]) < min_label[i])
                     min_label[i] = atomic_load(&labels[indices[k]]);
 
             if (min_label[i] < atomic_load(&labels[i]))
             {
                 atomic_store(&labels[i], min_label[i]);
-                for (int k=atomic_load(&ind_ptr[i]); k<atomic_load(&ind_ptr[i+1]); k++)
+                for (int k=start; k<end; k++)
                     atomic_store(&next_active[indices[k]], 1);
             }
         }
-
-        //memcpy (labels, next_labels, n_nodes*sizeof(int));
 
         print_update(next_active, iteration);
         
         _Atomic int* temp = active;
         active = next_active;
         next_active = temp;
-
-        //printf ("UC: %d\n", unique_elements(labels));
 
         if (get_elements_from_array(active, n_nodes) == 0)
             changed = 0;
@@ -85,17 +80,15 @@ int main (int argc, char* argv[])
     free(active);
     free(next_active);
     free(labels);
-    free(next_labels);
 
     return 0;
 }
 
-void initialize_labels (_Atomic int* labels,_Atomic int* next_labels,_Atomic int* active, int nodes)
+void initialize_labels (_Atomic int* labels,_Atomic int* active, int nodes)
 {
     for (int i=0; i<nodes; i++)
     {    
         atomic_init(&labels[i], i+1);
-        atomic_init(&next_labels[i], i+1);
         atomic_init(&active[i], 1);
     }
 }
@@ -169,13 +162,13 @@ void open_matrix (char* name)
     indices = malloc (m*sizeof(_Atomic int));
     ind_ptr = malloc (n*sizeof(_Atomic int));
 
-    indices = A->ir;         // row indices
-    ind_ptr = A->jc;           // column pointers
+    indices = (_Atomic int*)A->ir;         // row indices
+    ind_ptr = (_Atomic int*)A->jc;           // column pointers
     n_nodes = n;
     n_elements = nnz/2;
 
     Mat_Close(matfp);
 
-    printf ("You've got %d nodes and %d elements in total.\n", n_nodes, n_elements);
+    printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
 
 }

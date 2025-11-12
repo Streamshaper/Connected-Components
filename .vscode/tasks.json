@@ -14,8 +14,13 @@
                 "-lm",
                 "-lmatio"
             ],
-            "group": { "kind": "build", "isDefault": true },
-            "problemMatcher": ["$gcc"]
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
         }
     ]
 }
