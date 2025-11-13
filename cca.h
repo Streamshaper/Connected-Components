@@ -3,7 +3,7 @@
 
 void initialize_labels (_Atomic int* labels, int* active, int nodes);
 
-void print_update (int* still_active_labels, int iter);
+void print_update (int iter, int n_active);
 
 int get_elements_from_array (int* array, int array_size);
 

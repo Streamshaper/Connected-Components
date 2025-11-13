@@ -9,6 +9,8 @@
 #include <cilk/cilkscale.h> // Used for benchmarking
 #include <cilk/cilk_api.h>
 
+#define GRAIN 512
+
 //Compile with: clang -fopencilk -lm cc.c -O3 -o cc -lmatio
 
 double wall_time() {
@@ -21,6 +23,7 @@ int n_nodes;
 int n_elements;
 int* indices;
 int* ind_ptr;
+int n_active;
 
 int main (int argc, char* argv[])
 {
@@ -31,9 +34,10 @@ int main (int argc, char* argv[])
     int *active = malloc (n_nodes*sizeof(int));  // active nodes
     int *next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
 
-    int n_neigh = 0;
     int iteration = 0;
     int changed = 1;
+
+    n_active = n_nodes;
 
     double t0 = wall_time();
     
@@ -41,46 +45,53 @@ int main (int argc, char* argv[])
 
     wsp_t start = wsp_getworkspan();
 
-    while (changed)
+    while (n_active)
     {
         iteration++;
 
-        memset (next_active, 0, n_nodes*sizeof(int));
+        cilk_for (int i = 0; i < n_nodes; ++i)
+            next_active[i] = 0;
 
-        cilk_for (int i=0; i<n_nodes; i++)
+
+        cilk_for (int block = 0; block < n_nodes; block += GRAIN) 
         {
-            if (active[i] == 0) continue;
+            int end = block + GRAIN;
+            if (end > n_nodes) end = n_nodes;
+
+            for (int i = block; i < end; ++i) 
+            {
+                if (active[i] == 0) continue;
             
-            int start = ind_ptr[i];
-            int end = ind_ptr[i+1];
+                int start = ind_ptr[i];
+                int end = ind_ptr[i+1];
 
-            if (start == end) continue;
+                if (start == end) continue;
 
-            int min_label = atomic_load_explicit(&labels[indices[start]], memory_order_relaxed);
+                int min_label = atomic_load_explicit(&labels[indices[start]], memory_order_relaxed);
 
-            for (int k = start+1; k < end; k++)
-            {
-                int neigh_label = atomic_load_explicit(&labels[indices[k]], memory_order_relaxed);
-                if (neigh_label < min_label)
-                    min_label = neigh_label;
+                for (int k = start+1; k < end; k++)
+                {
+                    int neigh_label = atomic_load_explicit(&labels[indices[k]], memory_order_relaxed);
+                    if (neigh_label < min_label)
+                        min_label = neigh_label;
+                }
+
+                if (min_label < atomic_load_explicit(&labels[i], memory_order_relaxed))
+                {
+                    atomic_store_explicit(&labels[i], min_label, memory_order_relaxed);
+                    for (int k=start; k<end; k++)
+                       next_active[indices[k]] = 1;
+                }
             }
 
-            if (min_label < atomic_load_explicit(&labels[i], memory_order_relaxed))
-            {
-                atomic_store_explicit(&labels[i], min_label, memory_order_relaxed);
-                for (int k=start; k<end; k++)
-                    next_active[indices[k]] = 1;
-            }
         }
 
-        print_update(next_active, iteration);
+        n_active = get_elements_from_array (active, n_nodes);
+        print_update(iteration, n_active);
         
         int* temp = active;
         active = next_active;
         next_active = temp;
-
-        if (get_elements_from_array(active, n_nodes) == 0)
-            changed = 0;
 
     }
 
@@ -101,7 +112,7 @@ int main (int argc, char* argv[])
 
 void initialize_labels (_Atomic int* labels,int* active, int nodes)
 {
-    for (int i=0; i<nodes; i++)
+    cilk_for (int i=0; i<nodes; i++)
     {    
         atomic_init(&labels[i], i+1);
         active[i] = 1;
@@ -112,17 +123,17 @@ int get_elements_from_array (int* array, int array_size)
 {
     int sum = 0;
 
-    for (int q=0; q<array_size; q++)
+    cilk_for (int q=0; q<array_size; q++)
         if (array[q] != 0) 
             sum++;
 
     return sum;
 }
 
-void print_update (int* still_active_labels, int iter)
+void print_update (int iter, int n_active)
 {
     printf("Iteration: %d || ", iter);
-    printf("Still Active: %d nodes.", get_elements_from_array(still_active_labels, n_nodes));
+    printf("Still Active: %d nodes.", n_active);
     printf ("\n");
 }
 
