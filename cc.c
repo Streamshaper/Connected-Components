@@ -28,11 +28,10 @@ int n_active;
 int main (int argc, char* argv[])
 {
     open_matrix ("com-LiveJournal.mat"); // Check, missing free
-    int nworkers = __cilkrts_get_nworkers();
-    printf("Running with %d Cilk workers\n", nworkers);
-    _Atomic int *labels = malloc (n_nodes*sizeof(_Atomic int));  // label of each node
-    int *active = malloc (n_nodes*sizeof(int));  // active nodes
-    int *next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
+    
+    _Atomic int* labels = malloc (n_nodes*sizeof(_Atomic int));  // label of each node
+    int* active = malloc (n_nodes*sizeof(int));  // active nodes
+    int* next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
 
     int iteration = 0;
     int changed = 1;
@@ -55,10 +54,10 @@ int main (int argc, char* argv[])
 
         cilk_for (int block = 0; block < n_nodes; block += GRAIN) 
         {
-            int end = block + GRAIN;
-            if (end > n_nodes) end = n_nodes;
+            int block_end = block + GRAIN;
+            if (block_end > n_nodes) block_end = n_nodes;
 
-            for (int i = block; i < end; ++i) 
+            for (int i = block; i < block_end; ++i) 
             {
                 if (active[i] == 0) continue;
             
@@ -83,16 +82,14 @@ int main (int argc, char* argv[])
                        next_active[indices[k]] = 1;
                 }
             }
-
         }
 
-        n_active = get_elements_from_array (active, n_nodes);
+        n_active = get_elements_from_array (next_active, n_nodes);
         print_update(iteration, n_active);
         
         int* temp = active;
         active = next_active;
         next_active = temp;
-
     }
 
     wsp_t end = wsp_getworkspan();
@@ -165,11 +162,6 @@ int unique_elements (_Atomic int* labels)
             
 }
 
-void print_final (_Atomic int* labels, int iterations)
-{
-    printf("Number Of Connected Components: %d.", unique_elements(labels));
-}
-
 void open_matrix (char* name)
 {
     mat_t *matfp = Mat_Open(name, MAT_ACC_RDONLY);
@@ -181,14 +173,14 @@ void open_matrix (char* name)
     matvar_t *Avar = Mat_VarGetStructFieldByName(problem, "A", 0);
     if (!Avar || Avar->class_type != MAT_C_SPARSE) { fprintf(stderr,"A is not sparse\n"); exit(2); }
 
-    mat_sparse_t *A = (mat_sparse_t*)Avar->data; // Correct way to access sparse data
+    mat_sparse_t *A = (mat_sparse_t*)Avar->data;
     size_t m = Avar->dims[0], n = Avar->dims[1], nnz = A->nzmax;
 
     indices = malloc (m*sizeof(int));
     ind_ptr = malloc (n*sizeof(int));
 
     indices = (int*)A->ir;         // row indices
-    ind_ptr = (int*)A->jc;           // column pointers
+    ind_ptr = (int*)A->jc;         // column pointers
     n_nodes = n;
     n_elements = nnz/2;
 
