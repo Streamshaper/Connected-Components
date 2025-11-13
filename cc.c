@@ -28,8 +28,8 @@ int main (int argc, char* argv[])
     int nworkers = __cilkrts_get_nworkers();
     printf("Running with %d Cilk workers\n", nworkers);
     _Atomic int *labels = malloc (n_nodes*sizeof(_Atomic int));  // label of each node
-    _Atomic int *active = malloc (n_nodes*sizeof(_Atomic int));  // active nodes
-    _Atomic int *next_active = malloc (n_nodes*sizeof(_Atomic int)); // nodes that need to be woken up
+    int *active = malloc (n_nodes*sizeof(int));  // active nodes
+    int *next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
 
     int n_neigh = 0;
     int iteration = 0;
@@ -45,40 +45,37 @@ int main (int argc, char* argv[])
     {
         iteration++;
 
-        memset (next_active, 0, n_nodes*sizeof(_Atomic int));
+        memset (next_active, 0, n_nodes*sizeof(int));
 
         cilk_for (int i=0; i<n_nodes; i++)
         {
-            if (atomic_load(&active[i]) == 0) continue;
+            if (active[i] == 0) continue;
             
-            int min_label;
-            int start;
-            int end;
-            start = ind_ptr[i];
-            end = ind_ptr[i+1];
+            int start = ind_ptr[i];
+            int end = ind_ptr[i+1];
 
             if (start == end) continue;
 
-            min_label = atomic_load(&labels[indices[start]]);
+            int min_label = atomic_load_explicit(&labels[indices[start]], memory_order_relaxed);
 
             for (int k = start+1; k < end; k++)
             {
-                int neigh_label = atomic_load(&labels[indices[k]]);
+                int neigh_label = atomic_load_explicit(&labels[indices[k]], memory_order_relaxed);
                 if (neigh_label < min_label)
                     min_label = neigh_label;
             }
 
-            if (min_label < atomic_load(&labels[i]))
+            if (min_label < atomic_load_explicit(&labels[i], memory_order_relaxed))
             {
                 atomic_store_explicit(&labels[i], min_label, memory_order_relaxed);
                 for (int k=start; k<end; k++)
-                    atomic_store_explicit(&next_active[indices[k]], 1, memory_order_relaxed);
+                    next_active[indices[k]] = 1;
             }
         }
 
         print_update(next_active, iteration);
         
-        _Atomic int* temp = active;
+        int* temp = active;
         active = next_active;
         next_active = temp;
 
@@ -102,28 +99,27 @@ int main (int argc, char* argv[])
     return 0;
 }
 
-void initialize_labels (_Atomic int* labels,_Atomic int* active, int nodes)
+void initialize_labels (_Atomic int* labels,int* active, int nodes)
 {
     for (int i=0; i<nodes; i++)
     {    
         atomic_init(&labels[i], i+1);
-        atomic_init(&active[i], 1);
+        active[i] = 1;
     }
 }
 
-
-int get_elements_from_array (_Atomic int* array, int array_size)
+int get_elements_from_array (int* array, int array_size)
 {
     int sum = 0;
 
     for (int q=0; q<array_size; q++)
-        if (atomic_load(&array[q]) != 0) 
+        if (array[q] != 0) 
             sum++;
 
     return sum;
 }
 
-void print_update (_Atomic int* still_active_labels, int iter)
+void print_update (int* still_active_labels, int iter)
 {
     printf("Iteration: %d || ", iter);
     printf("Still Active: %d nodes.", get_elements_from_array(still_active_labels, n_nodes));
