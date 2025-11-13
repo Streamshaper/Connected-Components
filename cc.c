@@ -9,9 +9,9 @@
 #include <cilk/cilkscale.h> // Used for benchmarking
 #include <cilk/cilk_api.h>
 
-#define GRAIN 512
+#define GRAIN 2048
 
-//Compile with: clang -fopencilk -lm cc.c -O3 -o cc -lmatio
+//Compile with: clang -fopencilk -fcilktool=cilkscale -lm cc.c -O3 -o cc -lmatio
 
 double wall_time() {
     struct timeval t;
