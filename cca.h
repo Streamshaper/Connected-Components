@@ -3,11 +3,7 @@
 
 void initialize_labels (int* labels, int* active, int nodes);
 
-void initialize_csr_matrix (int* ind_ptr, int* indices);
-
 void reinitialize_matrices (int* next_active, int nodes);
-
-void reinitialize_neighboors (int* neigh_labels, int nodes);
 
 void print_update (int* labels, int* still_active_labels, int iter);
 

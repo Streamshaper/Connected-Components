@@ -5,7 +5,7 @@
 #include <matio.h>
 #include "cca.h"
 
-//Compile with: gcc -I. -lm -lmatio -O3 -o cc
+//Compile with: gcc -I. -lm -O3 -o cc -lmatio
 
 int n_nodes;
 int n_elements;
@@ -19,7 +19,7 @@ int main (int argc, char* argv[])
     int *labels = malloc (n_nodes*sizeof(int));  // label of each node
     int *active = malloc (n_nodes*sizeof(int));  // active nodes
     int *next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
-    int *neigh_labels = malloc (n_nodes*sizeof(int)); // neighbours' labels for a given node
+   
     int min_label, start, end;
     int n_neigh = 0;
     int iteration = 0;
@@ -57,13 +57,6 @@ int main (int argc, char* argv[])
                 for (int k=start; k<end; k++)
                     next_active[indices[k]] = 1;
             }
-
-            if (i%200000 == 0)
-            {
-                end_t = clock();
-                printf ("Iteration completion: %.1f%% || Time elapsed: %.1lf seconds\n", 
-                    100.0*i/n_nodes,(double)(end_t-start_t)/CLOCKS_PER_SEC);
-            }
         }
 
         print_update(labels, next_active, iteration);
@@ -87,20 +80,8 @@ int main (int argc, char* argv[])
     free(active);
     free(next_active);
     free(labels);
-    free(neigh_labels);
 
     return 0;
-}
-
-void initialize_csr_matrix (int* ind_ptr, int* indices)
-{
-    int temp_ptr [] = {0, 2, 3, 5, 7, 9, 10, 11, 12, 14, 15, 16, 16};
-    for (int q=0; q<n_elements; q++)
-        ind_ptr[q] = temp_ptr[q];
-
-    int temp_idx [] = {1, 4, 0, 7, 8, 4, 10, 0, 3, 6, 5, 2, 2, 9, 8, 3};
-    for (int q=0; q<n_elements; q++)
-        indices[q] = temp_idx[q];
 }
 
 void initialize_labels (int* labels, int* active, int nodes)
@@ -118,12 +99,6 @@ void reinitialize_matrices (int* next_active, int nodes)
     {
         next_active[p] = 0;
     }
-}
-
-void reinitialize_neighboors (int* neigh_labels, int nodes)
-{
-    for (int p=0; p<nodes; p++)
-        neigh_labels[p] = 0;
 }
 
 int get_elements_from_array (int* array, int array_size)
