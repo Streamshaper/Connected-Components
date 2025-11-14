@@ -18,7 +18,8 @@
         "ranges": "c",
         "span": "c",
         "regex": "c",
-        "valarray": "c"
+        "valarray": "c",
+        "*.inc": "c"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/gcc"
     
