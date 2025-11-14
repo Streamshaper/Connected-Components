@@ -1,5 +1,5 @@
 {
-    "C_Cpp.errorSquiggles": "disabled",
+    "C_Cpp.errorSquiggles": "enabled",
     "files.associations": {
         "cca.h": "c",
         "cilk.h": "c",
@@ -19,6 +19,7 @@
         "span": "c",
         "regex": "c",
         "valarray": "c"
-    }
+    },
+    "C_Cpp.default.compilerPath": "/usr/bin/gcc"
     
 }

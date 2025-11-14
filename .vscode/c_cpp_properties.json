@@ -2,11 +2,11 @@
     "configurations": [
         {
             "name": "OpenCilk",
-            "compilerPath": "/usr/local/opencilk/bin/clang",
+            "compilerPath": "/usr/bin/gcc",
             "intelliSenseMode": "clang-x64",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/usr/local/opencilk/lib/clang/16/include",
+                "/usr/local/opencilk/lib/clang/16/include/"
             ],
             "defines": [
                 "__cilk__"
@@ -20,6 +20,18 @@
                 ],
                 "limitSymbolsToIncludedHeaders": false
             }
+        },
+        {
+            "name": "OpenMP",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/usr/lib/gcc/x86_64-linux-gnu/11/include/"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "${default}"
         }
     ],
     "version": 4

@@ -3,15 +3,13 @@
 #include <string.h>
 #include <sys/time.h>
 #include <matio.h>
-#include <cilk/cilk.h>
 #include <stdatomic.h>
 #include "cca.h"
-#include <cilk/cilkscale.h> // Used for benchmarking
-#include <cilk/cilk_api.h>
+#include <omp.h>
 
 #define GRAIN 2048
 
-//Compile with: clang -fopencilk -fcilktool=cilkscale -lm cc.c -O3 -o cc -lmatio
+//Compile with: gcc -fopenmp -lm cc.c -O3 -o cc -lmatio
 
 double wall_time() {
     struct timeval t;
@@ -42,17 +40,15 @@ int main (int argc, char* argv[])
     
     initialize_labels (labels, active, n_nodes);
 
-    wsp_t start = wsp_getworkspan();
-
     while (n_active)
     {
         iteration++;
 
-        cilk_for (int i = 0; i < n_nodes; ++i)
+        for (int i = 0; i < n_nodes; ++i)
             next_active[i] = 0;
 
-
-        cilk_for (int block = 0; block < n_nodes; block += GRAIN) 
+        #pragma omp parallel for 
+        for (int block = 0; block < n_nodes; block += GRAIN) 
         {
             int block_end = block + GRAIN;
             if (block_end > n_nodes) block_end = n_nodes;
@@ -92,10 +88,6 @@ int main (int argc, char* argv[])
         next_active = temp;
     }
 
-    wsp_t end = wsp_getworkspan();
-    wsp_t elapsed = wsp_sub(end, start);
-    wsp_dump(elapsed, "my computation");
-
     printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), wall_time()-t0);
 
     free(ind_ptr);
@@ -109,7 +101,7 @@ int main (int argc, char* argv[])
 
 void initialize_labels (_Atomic int* labels,int* active, int nodes)
 {
-    cilk_for (int i=0; i<nodes; i++)
+    for (int i=0; i<nodes; i++)
     {    
         atomic_init(&labels[i], i+1);
         active[i] = 1;
@@ -120,7 +112,7 @@ int get_elements_from_array (int* array, int array_size)
 {
     int sum = 0;
 
-    cilk_for (int q=0; q<array_size; q++)
+    for (int q=0; q<array_size; q++)
         if (array[q] != 0) 
             sum++;
 

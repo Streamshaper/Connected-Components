@@ -2,12 +2,11 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "build with OpenCilk",
+            "label": "build with GCC",
             "type": "shell",
-            "command": "/usr/local/opencilk/bin/clang",
+            "command": "/usr/bin/gcc",
             "args": [
-                "-fopencilk",
-                "-fcilktool=cilkscale",
+                "-fopenmp",
                 "-g",
                 "${workspaceFolder}/*.c",
                 "-o",
