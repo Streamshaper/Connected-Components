@@ -38,52 +38,56 @@ int main (int argc, char* argv[])
     
     initialize_labels (labels, active, n_nodes);
 
+    double t0 = wall_time();
 
-double t0 = wall_time();
     while (n_active)
     {
-        iteration++;
+        iteration++;  // Active nodes have stamp == iteration
+        int n_active_next = 0;
 
-        #pragma omp parallel for 
-        for (int i = 0; i < n_nodes; ++i)
-            next_active[i] = 0;
-
-        #pragma omp parallel for schedule (dynamic, 512)
-        for (int i = 0; i < n_nodes; i++) 
+        #pragma omp parallel for schedule(dynamic, 512) reduction(+:n_active_next)
+        for (int i = 0; i < n_nodes; i++)
         {
-                if (active[i] == 0) continue;
-            
-                int start = ind_ptr[i];
-                int end = ind_ptr[i+1];
+            if (active[i] != iteration) continue;
 
-                if (start == end) continue;
+            int start = ind_ptr[i];
+            int end   = ind_ptr[i+1];
+            if (start == end) continue;
 
-                int min_label = labels[indices[start]];
+            int min_label = labels[indices[start]];
+            for (int k = start + 1; k < end; k++)
+            {
+                int l = labels[indices[k]];
+                if (l < min_label)
+                    min_label = l;
+            }
 
-                for (int k = start+1; k < end; k++)
+            if (min_label < labels[i])
+            {
+                labels[i] = min_label;
+
+                for (int k = start; k < end; k++)
                 {
-                    int neigh_label = labels[indices[k]];
-                    if (neigh_label < min_label)
-                        min_label = neigh_label;
+                    int nb = indices[k];
+                    
+                    if (next_active[nb] != iteration + 1)
+                    {
+                        next_active[nb] = iteration + 1;
+                        n_active_next++;
+                    }
                 }
-
-                if (min_label < labels[i])
-                {
-                    labels[i] = min_label;
-                    for (int k=start; k<end; k++)
-                       next_active[indices[k]] = 1;
-                }
-            
+            }
         }
 
-        n_active = get_elements_from_array (next_active, n_nodes);
-        //print_update(iteration, n_active);
-        
+        n_active = n_active_next;
+
+        // Swap
         int* temp = active;
         active = next_active;
         next_active = temp;
     }
-double t1 = wall_time();
+    double t1 = wall_time();
+
     //printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
     printf ("%lf", t1-t0);
 
