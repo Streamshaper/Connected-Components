@@ -24,6 +24,8 @@ int n_active;
 int main (int argc, char* argv[])
 {
     open_matrix ("com-LiveJournal.mat"); // Check, missing free
+
+    double t0 = wall_time();
     
     int* labels = malloc (n_nodes*sizeof(int));  // label of each node
     int* active = malloc (n_nodes*sizeof(int));  // active nodes
@@ -34,11 +36,7 @@ int main (int argc, char* argv[])
 
     n_active = n_nodes;
 
-    
-    
     initialize_labels (labels, active, n_nodes);
-
-    double t0 = wall_time();
 
     while (n_active)
     {
@@ -69,7 +67,7 @@ int main (int argc, char* argv[])
                 for (int k = start; k < end; k++)
                 {
                     int nb = indices[k];
-                    
+
                     if (next_active[nb] != iteration + 1)
                     {
                         next_active[nb] = iteration + 1;
@@ -86,10 +84,6 @@ int main (int argc, char* argv[])
         active = next_active;
         next_active = temp;
     }
-    double t1 = wall_time();
-
-    //printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
-    printf ("%lf", t1-t0);
 
     free(ind_ptr);
     free(indices);
@@ -97,6 +91,10 @@ int main (int argc, char* argv[])
     free(next_active);
     free(labels);
 
+    double t1 = wall_time();
+    printf ("%lf", t1-t0);
+    //printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
+    
     return 0;
 }
 
