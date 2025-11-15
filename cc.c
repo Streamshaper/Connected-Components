@@ -169,11 +169,15 @@ void open_matrix (char* name)
     mat_sparse_t *A = (mat_sparse_t*)Avar->data;
     size_t m = Avar->dims[0], n = Avar->dims[1], nnz = A->nzmax;
 
-    indices = malloc (m*sizeof(int));
+    indices = malloc (nnz*sizeof(int));
     ind_ptr = malloc (n*sizeof(int));
 
-    indices = (int*)A->ir;         // row indices
-    ind_ptr = (int*)A->jc;         // column pointers
+    for (size_t q=0; q<nnz; q++)
+        indices[q] = (int)A->ir[q];
+
+    for (size_t q=0; q<n; q++)
+        ind_ptr[q] = (int)A->jc[q];
+        
     n_nodes = n;
     n_elements = nnz/2;
 
