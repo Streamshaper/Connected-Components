@@ -4,10 +4,29 @@
 #include <sys/time.h>
 #include <matio.h>
 #include <stdatomic.h>
+#include <unistd.h>
+#include <pthread.h>
 #include "cca.h"
-#include <omp.h>
 
-//Compile with: gcc -fopenmp -lm cc.c -O3 -o cc -lmatio
+
+//Compile with: gcc -lm cc.c -O3 -o cc -lmatio
+
+typedef struct {
+    int tid;
+    int n_threads;
+    int n_nodes;
+
+    int* ind_ptr;
+    int* indices;
+    int* labels;
+    int* active;
+    int* next_active;
+
+    int iteration;
+
+    int local_active_count;     // Thread-local n_active_next
+} thread_data_t;
+
 
 double wall_time() {
     struct timeval t;
@@ -20,6 +39,7 @@ int n_elements;
 int* indices;
 int* ind_ptr;
 int n_active;
+int n_threads;
 
 int main (int argc, char* argv[])
 {
@@ -33,74 +53,125 @@ int main (int argc, char* argv[])
 
     int iteration = 0;
     int changed = 1;
+    n_threads = sysconf(_SC_NPROCESSORS_ONLN);
+
 
     n_active = n_nodes;
 
     initialize_labels (labels, active, n_nodes);
 
-    while (n_active)
+    pthread_t threads[n_threads];
+    thread_data_t td[n_threads];
+
+    while (n_active > 0)
     {
-        iteration++;  // Active nodes have stamp == iteration
-        int n_active_next = 0;
+        iteration++;
 
-        #pragma omp parallel for schedule(dynamic, 512) reduction(+:n_active_next)
-        for (int i = 0; i < n_nodes; i++)
+        // Initialize per-thread structs
+        for (int t = 0; t < n_threads; t++)
         {
-            if (active[i] != iteration) continue;
+            td[t].tid       = t;
+            td[t].n_threads = n_threads;
+            td[t].n_nodes   = n_nodes;
 
-            int start = ind_ptr[i];
-            int end   = ind_ptr[i+1];
-            if (start == end) continue;
+            td[t].ind_ptr     = ind_ptr;
+            td[t].indices     = indices;
+            td[t].labels      = labels;
+            td[t].active      = active;
+            td[t].next_active = next_active;
 
-            int min_label = labels[indices[start]];
-            for (int k = start + 1; k < end; k++)
-            {
-                int l = labels[indices[k]];
-                if (l < min_label)
-                    min_label = l;
-            }
-
-            if (min_label < labels[i])
-            {
-                labels[i] = min_label;
-
-                for (int k = start; k < end; k++)
-                {
-                    int nb = indices[k];
-
-                    if (next_active[nb] != iteration + 1)
-                    {
-                        next_active[nb] = iteration + 1;
-                        n_active_next++;
-                    }
-                }
-            }
+            td[t].iteration   = iteration;
         }
+
+        // Launch threads
+        for (int t = 0; t < n_threads; t++)
+            pthread_create(&threads[t], NULL, worker, &td[t]);
+
+        // Join threads
+        for (int t = 0; t < n_threads; t++)
+            pthread_join(threads[t], NULL);
+
+        // Reduction: count next active nodes
+        int n_active_next = 0;
+        for (int t = 0; t < n_threads; t++)
+            n_active_next += td[t].local_active_count;
 
         n_active = n_active_next;
 
-        // Swap
+        // Swap active stamps
         int* temp = active;
         active = next_active;
         next_active = temp;
     }
+
+    double t1 = wall_time();
+    printf ("%lf", t1-t0);
+    printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
 
     free(ind_ptr);
     free(indices);
     free(active);
     free(next_active);
     free(labels);
-
-    double t1 = wall_time();
-    printf ("%lf", t1-t0);
-    //printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
     
     return 0;
 }
 
+void* worker(void* arg)
+{
+    thread_data_t* td = (thread_data_t*)arg;
+
+    int tid       = td->tid;
+    int n_threads = td->n_threads;
+    int n_nodes   = td->n_nodes;
+
+    int chunk = (n_nodes + n_threads - 1) / n_threads;
+    int start_i = tid * chunk;
+    int end_i   = start_i + chunk;
+    if (end_i > n_nodes) end_i = n_nodes;
+
+    td->local_active_count = 0;
+
+    for (int i = start_i; i < end_i; i++)
+    {
+        if (td->active[i] != td->iteration) continue;
+
+        int s = td->ind_ptr[i];
+        int e = td->ind_ptr[i+1];
+        if (s == e) continue;
+
+        int min_label = td->labels[ td->indices[s] ];
+
+        for (int k = s + 1; k < e; k++)
+        {
+            int l = td->labels[ td->indices[k] ];
+            if (l < min_label)
+                min_label = l;
+        }
+
+        if (min_label < td->labels[i])
+        {
+            td->labels[i] = min_label;
+
+            for (int k = s; k < e; k++)
+            {
+                int nb = td->indices[k];
+
+                if (td->next_active[nb] != td->iteration + 1)
+                {
+                    td->next_active[nb] = td->iteration + 1;
+                    td->local_active_count++;
+                }
+            }
+        }
+    }
+
+    return NULL;
+}
+
+
 void initialize_labels (int* labels,int* active, int nodes)
 {
-    #pragma omp parallel for 
     for (int i=0; i<nodes; i++)
     {    
         labels[i] = i+1;
@@ -112,7 +183,6 @@ int get_elements_from_array (int* array, int array_size)
 {
     int sum = 0;
 
-    #pragma omp parallel for reduction(+:sum)
     for (int q=0; q<array_size; q++)
         if (array[q] != 0) 
             sum++;

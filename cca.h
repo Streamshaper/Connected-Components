@@ -11,4 +11,6 @@ int unique_elements (int* labels);
 
 void open_matrix (char* name);
 
+void* worker(void* arg);
+
 #endif
