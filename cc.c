@@ -23,8 +23,7 @@ typedef struct {
     int* next_active;
 
     int iteration;
-
-    int local_active_count;     // Thread-local n_active_next
+    int local_active_count;
 } thread_data_t;
 
 
@@ -43,7 +42,7 @@ int n_threads;
 
 int main (int argc, char* argv[])
 {
-    open_matrix ("com-LiveJournal.mat"); // Check, missing free
+    open_matrix ("com-LiveJournal.mat");
 
     double t0 = wall_time();
     
@@ -54,7 +53,6 @@ int main (int argc, char* argv[])
     int iteration = 0;
     int changed = 1;
     n_threads = sysconf(_SC_NPROCESSORS_ONLN);
-
 
     n_active = n_nodes;
 
@@ -67,7 +65,6 @@ int main (int argc, char* argv[])
     {
         iteration++;
 
-        // Initialize per-thread structs
         for (int t = 0; t < n_threads; t++)
         {
             td[t].tid       = t;
@@ -106,7 +103,7 @@ int main (int argc, char* argv[])
 
     double t1 = wall_time();
     printf ("%lf", t1-t0);
-    printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
+    //printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
 
     free(ind_ptr);
     free(indices);
@@ -169,7 +166,6 @@ void* worker(void* arg)
     return NULL;
 }
 
-
 void initialize_labels (int* labels,int* active, int nodes)
 {
     for (int i=0; i<nodes; i++)
@@ -221,6 +217,7 @@ int unique_elements (int* labels)
             sum++;
         }
     }
+    free (temp);
     return sum;
             
 }
@@ -239,11 +236,15 @@ void open_matrix (char* name)
     mat_sparse_t *A = (mat_sparse_t*)Avar->data;
     size_t m = Avar->dims[0], n = Avar->dims[1], nnz = A->nzmax;
 
-    indices = malloc (m*sizeof(int));
+    indices = malloc (nnz*sizeof(int));
     ind_ptr = malloc (n*sizeof(int));
 
-    indices = (int*)A->ir;         // row indices
-    ind_ptr = (int*)A->jc;         // column pointers
+    for (size_t q=0; q<nnz; q++)
+        indices[q] = (int)A->ir[q];
+
+    for (size_t q=0; q<n; q++)
+        ind_ptr[q] = (int)A->jc[q];
+
     n_nodes = n;
     n_elements = nnz/2;
 
