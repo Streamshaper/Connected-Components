@@ -11,8 +11,6 @@
 
 #define GRAIN 2048
 
-//Compile with: clang -fopencilk -fcilktool=cilkscale -lm cc.c -O3 -o cc -lmatio
-
 double wall_time() {
     struct timeval t;
     gettimeofday(&t, NULL);
