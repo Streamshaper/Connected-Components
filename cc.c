@@ -7,8 +7,6 @@
 #include "cca.h"
 #include <omp.h>
 
-//Compile with: gcc -fopenmp -lm cc.c -O3 -o cc -lmatio
-
 double wall_time() {
     struct timeval t;
     gettimeofday(&t, NULL);
