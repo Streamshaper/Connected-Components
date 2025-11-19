@@ -1,3 +1,5 @@
+#define BENCHMARK 0
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,9 +9,6 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "cca.h"
-
-
-//Compile with: gcc -lm cc.c -O3 -o cc -lmatio
 
 typedef struct {
     int tid;
@@ -95,6 +94,9 @@ int main (int argc, char* argv[])
 
         n_active = n_active_next;
 
+        if(!BENCHMARK)
+            print_update (iteration, n_active);
+
         // Swap active stamps
         int* temp = active;
         active = next_active;
@@ -102,8 +104,10 @@ int main (int argc, char* argv[])
     }
 
     double t1 = wall_time();
-    printf ("%lf", t1-t0);
-    //printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
+    if (!BENCHMARK)
+        printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
+    else
+        printf ("%lf", t1-t0);
 
     free(ind_ptr);
     free(indices);
@@ -250,6 +254,7 @@ void open_matrix (char* name)
 
     Mat_Close(matfp);
 
-    //printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
+    if (!BENCHMARK)
+        printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
 
 }
