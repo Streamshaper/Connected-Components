@@ -5,8 +5,6 @@
 #include <matio.h>
 #include "cca.h"
 
-//Compile with: gcc -I. -lm -O3 -o cc -lmatio
-
 int n_nodes;
 int n_elements;
 int* indices;
