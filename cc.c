@@ -30,35 +30,44 @@ double wall_time() {
     return t.tv_sec + t.tv_usec * 1e-6;
 }
 
+// Global matrix data
 int n_nodes;
 int n_elements;
 int* indices;
 int* ind_ptr;
+
+// Global control
 int n_active;
 int n_threads;
 int bench_active = 0;
+
+// Pthread work-stealing infrastructure
+pthread_barrier_t start_barrier;
+pthread_barrier_t end_barrier;
+
+volatile int stop_flag = 0;
+_Atomic int work_index;
 
 int main (int argc, char* argv[])
 {
     if (argc > 1 && atoi(argv[1])==1)
         bench_active = 1;
 
-    n_threads = _SC_NPROCESSORS_ONLN;
-    if (argc > 2)
-        if (atoi(argv[2])<=_SC_NPROCESSORS_ONLN)
+    n_threads = sysconf(_SC_NPROCESSORS_ONLN);
+    if (argc > 2) {
+        if (atoi(argv[2]) <= sysconf(_SC_NPROCESSORS_ONLN))
             n_threads = atoi(argv[2]);
-    
+    }
+
     open_matrix ("com-LiveJournal.mat");
 
     double t0 = wall_time();
     
-    int* labels = malloc (n_nodes*sizeof(int));  // label of each node
-    int* active = malloc (n_nodes*sizeof(int));  // active nodes
-    int* next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
+    int* labels = malloc (n_nodes*sizeof(int));  
+    int* active = malloc (n_nodes*sizeof(int));  
+    int* next_active = malloc (n_nodes*sizeof(int)); 
 
     int iteration = 0;
-    int changed = 1;
-
     n_active = n_nodes;
 
     initialize_labels (labels, active, n_nodes);
@@ -66,34 +75,46 @@ int main (int argc, char* argv[])
     pthread_t threads[n_threads];
     thread_data_t td[n_threads];
 
+    // Initialize the pthread barriers
+    pthread_barrier_init(&start_barrier, NULL, n_threads + 1);
+    pthread_barrier_init(&end_barrier,   NULL, n_threads + 1);
+
+    // Create persistent workers
+    for (int t = 0; t < n_threads; t++)
+    {
+        td[t].tid       = t;
+        td[t].n_threads = n_threads;
+        td[t].n_nodes   = n_nodes;
+
+        td[t].ind_ptr     = ind_ptr;
+        td[t].indices     = indices;
+        td[t].labels      = labels;
+        td[t].active      = active;
+        td[t].next_active = next_active;
+
+        td[t].iteration   = iteration;
+
+        pthread_create(&threads[t], NULL, worker, &td[t]);
+    }
+
     while (n_active > 0)
     {
         iteration++;
 
+        // Publish iteration marker to workers
         for (int t = 0; t < n_threads; t++)
-        {
-            td[t].tid       = t;
-            td[t].n_threads = n_threads;
-            td[t].n_nodes   = n_nodes;
+            td[t].iteration = iteration;
 
-            td[t].ind_ptr     = ind_ptr;
-            td[t].indices     = indices;
-            td[t].labels      = labels;
-            td[t].active      = active;
-            td[t].next_active = next_active;
+        // Reset global work pointer
+        atomic_store(&work_index, 0);
 
-            td[t].iteration   = iteration;
-        }
+        // Wake workers to start this iteration
+        pthread_barrier_wait(&start_barrier);
 
-        // Launch threads
-        for (int t = 0; t < n_threads; t++)
-            pthread_create(&threads[t], NULL, worker, &td[t]);
+        // Wait for them to finish
+        pthread_barrier_wait(&end_barrier);
 
-        // Join threads
-        for (int t = 0; t < n_threads; t++)
-            pthread_join(threads[t], NULL);
-
-        // Reduction: count next active nodes
+        // Reduction: sum per-thread local active counts
         int n_active_next = 0;
         for (int t = 0; t < n_threads; t++)
             n_active_next += td[t].local_active_count;
@@ -103,15 +124,25 @@ int main (int argc, char* argv[])
         if(!bench_active)
             print_update (iteration, n_active);
 
-        // Swap active stamps
+        // Swap active arrays
         int* temp = active;
         active = next_active;
         next_active = temp;
     }
 
+    // Stop workers cleanly
+    stop_flag = 1;
+    pthread_barrier_wait(&start_barrier);
+    for (int t = 0; t < n_threads; t++)
+        pthread_join(threads[t], NULL);
+
+    pthread_barrier_destroy(&start_barrier);
+    pthread_barrier_destroy(&end_barrier);
+
     double t1 = wall_time();
     if (!bench_active)
-        printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
+        printf ("Total Connected Components: %d, found in %lf seconds!\n", 
+                unique_elements(labels), t1-t0);
     else
         printf ("%lf", t1-t0);
 
@@ -128,49 +159,62 @@ void* worker(void* arg)
 {
     thread_data_t* td = (thread_data_t*)arg;
 
-    int tid       = td->tid;
-    int n_threads = td->n_threads;
-    int n_nodes   = td->n_nodes;
-
-    int chunk = (n_nodes + n_threads - 1) / n_threads;
-    int start_i = tid * chunk;
-    int end_i   = start_i + chunk;
-    if (end_i > n_nodes) end_i = n_nodes;
-
-    td->local_active_count = 0;
-
-    for (int i = start_i; i < end_i; i++)
+    while (1)
     {
-        if (td->active[i] != td->iteration) continue;
+        // Wait for main to start new iteration
+        pthread_barrier_wait(&start_barrier);
 
-        int s = td->ind_ptr[i];
-        int e = td->ind_ptr[i+1];
-        if (s == e) continue;
+        if (stop_flag)
+            break;
 
-        int min_label = td->labels[ td->indices[s] ];
+        int n_nodes   = td->n_nodes;
+        int iteration = td->iteration;
+        td->local_active_count = 0;
 
-        for (int k = s + 1; k < e; k++)
+        // Work stealing: threads grab node indices dynamically
+        int i = atomic_fetch_add(&work_index, 1);
+
+        while (i < n_nodes)
         {
-            int l = td->labels[ td->indices[k] ];
-            if (l < min_label)
-                min_label = l;
-        }
-
-        if (min_label < td->labels[i])
-        {
-            td->labels[i] = min_label;
-
-            for (int k = s; k < e; k++)
+            if (td->active[i] == iteration)
             {
-                int nb = td->indices[k];
-
-                if (td->next_active[nb] != td->iteration + 1)
+                int s = td->ind_ptr[i];
+                int e = td->ind_ptr[i+1];
+                if (s != e)
                 {
-                    td->next_active[nb] = td->iteration + 1;
-                    td->local_active_count++;
+                    int min_label = td->labels[ td->indices[s] ];
+
+                    for (int k = s + 1; k < e; k++)
+                    {
+                        int l = td->labels[ td->indices[k] ];
+                        if (l < min_label)
+                            min_label = l;
+                    }
+
+                    if (min_label < td->labels[i])
+                    {
+                        td->labels[i] = min_label;
+
+                        for (int k = s; k < e; k++)
+                        {
+                            int nb = td->indices[k];
+
+                            if (td->next_active[nb] != iteration + 1)
+                            {
+                                td->next_active[nb] = iteration + 1;
+                                td->local_active_count++;
+                            }
+                        }
+                    }
                 }
             }
+
+            // Grab another unit of work
+            i = atomic_fetch_add(&work_index, 1);
         }
+
+        // Signal that this worker is finished
+        pthread_barrier_wait(&end_barrier);
     }
 
     return NULL;
@@ -183,24 +227,6 @@ void initialize_labels (int* labels,int* active, int nodes)
         labels[i] = i+1;
         active[i] = 1;
     }
-}
-
-int get_elements_from_array (int* array, int array_size)
-{
-    int sum = 0;
-
-    for (int q=0; q<array_size; q++)
-        if (array[q] != 0) 
-            sum++;
-
-    return sum;
-}
-
-void print_update (int iter, int n_active)
-{
-    printf("Iteration: %d || ", iter);
-    printf("Still Active: %d nodes.", n_active);
-    printf ("\n");
 }
 
 int unique_elements (int* labels)
@@ -230,6 +256,11 @@ int unique_elements (int* labels)
     free (temp);
     return sum;
             
+}
+
+void print_update (int iter, int n_active)
+{
+    printf("Iteration: %d || Still Active: %d nodes.\n", iter, n_active);
 }
 
 void open_matrix (char* name)
@@ -262,5 +293,4 @@ void open_matrix (char* name)
 
     if (!bench_active)
         printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
-
 }

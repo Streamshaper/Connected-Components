@@ -8,6 +8,7 @@
             "args": [
                 "-fopenmp",
                 "-g",
+                "-std=gnu99",
                 "${workspaceFolder}/*.c",
                 "-o",
                 "${workspaceFolder}/cc",

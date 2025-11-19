@@ -1,4 +1,4 @@
-CFLAGS = -O3
+CFLAGS = -std=gnu99 -O3 
 LDLIBS = -lm -lmatio
 
 all: cc
