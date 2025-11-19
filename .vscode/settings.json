@@ -18,7 +18,8 @@
         "ranges": "c",
         "span": "c",
         "regex": "c",
-        "valarray": "c"
+        "valarray": "c",
+        "chrono": "c"
     }
     
 }

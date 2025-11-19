@@ -1,3 +1,5 @@
+#define BENCHMARK 0
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,10 +25,15 @@ int* indices;
 int* ind_ptr;
 int n_active;
 
+wsp_t start;
+wsp_t end;
+
 int main (int argc, char* argv[])
 {
-    open_matrix ("com-LiveJournal.mat"); // Check, missing free
+    open_matrix ("com-LiveJournal.mat");
     
+    double t0 = wall_time();
+
     _Atomic int* labels = malloc (n_nodes*sizeof(_Atomic int));  // label of each node
     int* active = malloc (n_nodes*sizeof(int));  // active nodes
     int* next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
@@ -35,12 +42,11 @@ int main (int argc, char* argv[])
     int changed = 1;
 
     n_active = n_nodes;
-
-    double t0 = wall_time();
     
     initialize_labels (labels, active, n_nodes);
 
-    wsp_t start = wsp_getworkspan();
+    if (!BENCHMARK)
+        start = wsp_getworkspan();
 
     while (n_active)
     {
@@ -83,18 +89,23 @@ int main (int argc, char* argv[])
         }
 
         n_active = get_elements_from_array (next_active, n_nodes);
-        print_update(iteration, n_active);
+        if (!BENCHMARK)
+            print_update(iteration, n_active);
         
         int* temp = active;
         active = next_active;
         next_active = temp;
     }
+    if (!BENCHMARK)
+    {
+        end = wsp_getworkspan();
+        wsp_dump(wsp_sub(end, start), "my computation");
+    }
 
-    wsp_t end = wsp_getworkspan();
-    wsp_t elapsed = wsp_sub(end, start);
-    wsp_dump(elapsed, "my computation");
-
-    printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), wall_time()-t0);
+    if(!BENCHMARK)
+        printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), wall_time()-t0);
+    else
+        printf ("%lf", wall_time()-t0);
 
     free(ind_ptr);
     free(indices);
@@ -188,6 +199,7 @@ void open_matrix (char* name)
 
     Mat_Close(matfp);
 
-    printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
+    if (!BENCHMARK)
+        printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
 
 }
