@@ -1,5 +1,3 @@
-#define BENCHMARK 0
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,12 +22,16 @@ int n_elements;
 int* indices;
 int* ind_ptr;
 int n_active;
+int bench_active = 0;
 
 wsp_t start;
 wsp_t end;
 
 int main (int argc, char* argv[])
 {
+    if (argc > 1 && atoi(argv[1])==1)
+        bench_active = 1;
+
     open_matrix ("com-LiveJournal.mat");
     
     double t0 = wall_time();
@@ -45,7 +47,7 @@ int main (int argc, char* argv[])
     
     initialize_labels (labels, active, n_nodes);
 
-    if (!BENCHMARK)
+    if (!bench_active)
         start = wsp_getworkspan();
 
     while (n_active)
@@ -89,20 +91,20 @@ int main (int argc, char* argv[])
         }
 
         n_active = get_elements_from_array (next_active, n_nodes);
-        if (!BENCHMARK)
+        if (!bench_active)
             print_update(iteration, n_active);
         
         int* temp = active;
         active = next_active;
         next_active = temp;
     }
-    if (!BENCHMARK)
+    if (!bench_active)
     {
         end = wsp_getworkspan();
         wsp_dump(wsp_sub(end, start), "my computation");
     }
 
-    if(!BENCHMARK)
+    if(!bench_active)
         printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), wall_time()-t0);
     else
         printf ("%lf", wall_time()-t0);
@@ -199,7 +201,7 @@ void open_matrix (char* name)
 
     Mat_Close(matfp);
 
-    if (!BENCHMARK)
+    if (!bench_active)
         printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
 
 }
