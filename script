@@ -10,13 +10,22 @@ runs="$2"
 
 sum=0
 
-for ((i=1; i<=runs; i++)); do
-    raw=$("$prog")                 # get output like "1.402573,"
-    value=$(echo "$raw" | tr -d ',')   # remove comma
+raw=$("$prog" "${@:3}")
+value=$(echo "$raw" | tr -d ',')
+sum=$(echo "$sum + $value" | bc -l)
+min=$value
+
+for ((i=1; i<runs; i++)); do
+    raw=$("$prog" "${@:3}")
+    value=$(echo "$raw" | tr -d ',')
     sum=$(echo "$sum + $value" | bc -l)
+
+    if (( $(echo "$value < $min" | bc -l) )); then
+        min="$value"
+    fi
 done
 
 average=$(echo "$sum / $runs" | bc -l)
 
-printf "Total: %.3f\n" "$sum"
 printf "Average: %.3f\n" "$average"
+printf "Min: %.3f\n" "$min"
