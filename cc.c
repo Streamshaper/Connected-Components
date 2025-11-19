@@ -1,5 +1,3 @@
-#define BENCHMARK 0 // When set to 1, only the total time of computation is printed.
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,9 +9,13 @@ int n_nodes;
 int n_elements;
 int* indices;
 int* ind_ptr;
+int bench_active = 0;
 
 int main (int argc, char* argv[])
 {
+    if (argc > 1 && atoi(argv[1]) == 1)
+        bench_active = 1;
+
     open_matrix ("com-LiveJournal.mat");
 
     clock_t zero_t = clock();
@@ -55,7 +57,7 @@ int main (int argc, char* argv[])
                     next_active[indices[k]] = 1;
             }
         }
-        if (!BENCHMARK)
+        if (!bench_active)
             print_update(labels, next_active, iteration);
 
         if (!changed) break;
@@ -67,7 +69,7 @@ int main (int argc, char* argv[])
         reinitialize_matrices(next_active, n_nodes);  // once per iteration, compare with iteration number don't initialize (idea)
     }
 
-    if (!BENCHMARK)
+    if (!bench_active)
         printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), (double)(clock()-zero_t)/CLOCKS_PER_SEC);
     else
         printf ("%lf", (double)(clock()-zero_t)/CLOCKS_PER_SEC);
@@ -171,7 +173,7 @@ void open_matrix (char* name)
     n_elements = nnz/2;
 
     Mat_Close(matfp);
-    if (!BENCHMARK)
+    if (!bench_active)
         printf ("The graph has %d nodes and %d elements in total.\n", n_nodes, n_elements);
 
 }
