@@ -9,7 +9,7 @@
 #include <cilk/cilkscale.h> // Used for benchmarking
 #include <cilk/cilk_api.h>
 
-#define GRAIN 2048
+#define GRAIN 65536
 
 double wall_time() {
     struct timeval t;
@@ -36,7 +36,7 @@ int main (int argc, char* argv[])
     
     double t0 = wall_time();
 
-    _Atomic int* labels = malloc (n_nodes*sizeof(_Atomic int));  // label of each node
+    int* labels = malloc (n_nodes*sizeof(int));  // label of each node
     int* active = malloc (n_nodes*sizeof(int));  // active nodes
     int* next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
 
@@ -54,8 +54,8 @@ int main (int argc, char* argv[])
     {
         iteration++;
 
-        cilk_for (int i = 0; i < n_nodes; ++i)
-            next_active[i] = 0;
+        memset(next_active, 0, n_nodes * sizeof(*next_active)); // presumably faster than for and cilk_for
+
 
 
         cilk_for (int block = 0; block < n_nodes; block += GRAIN) 
@@ -72,20 +72,21 @@ int main (int argc, char* argv[])
 
                 if (start == end) continue;
 
-                int min_label = atomic_load_explicit(&labels[indices[start]], memory_order_relaxed);
+                int min_label = labels[indices[start]];
 
                 for (int k = start+1; k < end; k++)
                 {
-                    int neigh_label = atomic_load_explicit(&labels[indices[k]], memory_order_relaxed);
+                    int neigh_label = labels[indices[k]];
                     if (neigh_label < min_label)
                         min_label = neigh_label;
                 }
 
-                if (min_label < atomic_load_explicit(&labels[i], memory_order_relaxed))
+                if (min_label < labels[i])
                 {
-                    atomic_store_explicit(&labels[i], min_label, memory_order_relaxed);
+                    labels[i] = min_label;
                     for (int k=start; k<end; k++)
-                       next_active[indices[k]] = 1;
+                        if (!next_active[indices[k]])   // reduces cache-line ping-pong
+                            next_active[indices[k]] = 1; 
                 }
             }
         }
@@ -118,11 +119,11 @@ int main (int argc, char* argv[])
     return 0;
 }
 
-void initialize_labels (_Atomic int* labels,int* active, int nodes)
+void initialize_labels (int* labels,int* active, int nodes)
 {
     cilk_for (int i=0; i<nodes; i++)
     {    
-        atomic_init(&labels[i], i+1);
+        labels[i] = i+1;
         active[i] = 1;
     }
 }
@@ -131,7 +132,7 @@ int get_elements_from_array (int* array, int array_size)
 {
     int sum = 0;
 
-    cilk_for (int q=0; q<array_size; q++)
+    for (int q=0; q<array_size; q++)
         if (array[q] != 0) 
             sum++;
 
@@ -145,27 +146,27 @@ void print_update (int iter, int n_active)
     printf ("\n");
 }
 
-int unique_elements (_Atomic int* labels)
+int unique_elements (int* labels)
 {
     int sum = 0;
     int *temp = malloc (n_nodes*sizeof(int));
     int found = 0;
 
-    temp[0] = atomic_load(&labels[0]);
+    temp[0] = labels[0];
     sum++;
 
     for (int k=1; k<n_nodes; k++)
     {    
         found = 0;
         for (int l=0; l<sum; l++)
-            if (temp[l] == atomic_load(&labels[k]))
+            if (temp[l] == labels[k])
             {
                 found = 1;
                 break;
             }
         if (!found)
         {
-            temp[sum] = atomic_load(&labels[k]);
+            temp[sum] = labels[k];
             sum++;
         }
     }
