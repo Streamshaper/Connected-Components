@@ -1,3 +1,5 @@
+#define BENCHMARK 0 // When set to 1, only the total time of computation is printed.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,20 +14,17 @@ int* ind_ptr;
 
 int main (int argc, char* argv[])
 {
-    open_matrix ("matrix.mat"); // Check, missing free
+    open_matrix ("com-LiveJournal.mat");
+
+    clock_t zero_t = clock();
 
     int *labels = malloc (n_nodes*sizeof(int));  // label of each node
     int *active = malloc (n_nodes*sizeof(int));  // active nodes
     int *next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
    
     int min_label, start, end;
-    int n_neigh = 0;
     int iteration = 0;
     int changed = 0;
-
-    clock_t zero_t = clock();
-    clock_t start_t = clock();
-    clock_t end_t;
     
     initialize_labels (labels, active, n_nodes);
 
@@ -56,8 +55,8 @@ int main (int argc, char* argv[])
                     next_active[indices[k]] = 1;
             }
         }
-
-        print_update(labels, next_active, iteration);
+        if (!BENCHMARK)
+            print_update(labels, next_active, iteration);
 
         if (!changed) break;
         
@@ -66,12 +65,12 @@ int main (int argc, char* argv[])
         next_active = temp;
 
         reinitialize_matrices(next_active, n_nodes);  // once per iteration, compare with iteration number don't initialize (idea)
-
-        printf ("UC: %d\n", unique_elements(labels));
     }
 
-
-    printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), (double)(clock()-zero_t)/CLOCKS_PER_SEC);
+    if (!BENCHMARK)
+        printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), (double)(clock()-zero_t)/CLOCKS_PER_SEC);
+    else
+        printf ("%lf", (double)(clock()-zero_t)/CLOCKS_PER_SEC);
 
     free(ind_ptr);
     free(indices);
@@ -145,11 +144,6 @@ int unique_elements (int* labels)
             
 }
 
-void print_final (int* labels, int iterations)
-{
-    printf("Number Of Connected Components: %d.", unique_elements(labels));
-}
-
 void open_matrix (char* name)
 {
     mat_t *matfp = Mat_Open(name, MAT_ACC_RDONLY);
@@ -177,7 +171,7 @@ void open_matrix (char* name)
     n_elements = nnz/2;
 
     Mat_Close(matfp);
-
-    printf ("You've got %d nodes and %d elements in total.\n", n_nodes, n_elements);
+    if (!BENCHMARK)
+        printf ("The graph has %d nodes and %d elements in total.\n", n_nodes, n_elements);
 
 }

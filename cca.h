@@ -9,8 +9,6 @@ void print_update (int* labels, int* still_active_labels, int iter);
 
 int unique_elements (int* labels);
 
-void print_final (int* labels, int iterations);
-
 void open_matrix (char* name);
 
 #endif
