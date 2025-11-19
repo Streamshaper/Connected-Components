@@ -1,3 +1,5 @@
+#define BENCHMARK 0
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,22 +79,28 @@ int main (int argc, char* argv[])
 
         n_active = n_active_next;
 
+        if (!BENCHMARK)
+            print_update (iteration, n_active);
+
         // Swap
         int* temp = active;
         active = next_active;
         next_active = temp;
     }
 
+    double t1 = wall_time();
+   
+    if (!BENCHMARK)
+        printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
+    else
+        printf ("%lf", t1-t0);
+    
     free(ind_ptr);
     free(indices);
     free(active);
     free(next_active);
     free(labels);
 
-    double t1 = wall_time();
-    printf ("%lf", t1-t0);
-    //printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
-    
     return 0;
 }
 
@@ -181,6 +189,7 @@ void open_matrix (char* name)
 
     Mat_Close(matfp);
 
-    //printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
+    if (!BENCHMARK)
+        printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
 
 }
