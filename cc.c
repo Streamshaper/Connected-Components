@@ -1,5 +1,3 @@
-#define BENCHMARK 0
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,9 +36,18 @@ int* indices;
 int* ind_ptr;
 int n_active;
 int n_threads;
+int bench_active = 0;
 
 int main (int argc, char* argv[])
 {
+    if (argc > 1 && atoi(argv[1])==1)
+        bench_active = 1;
+
+    n_threads = _SC_NPROCESSORS_ONLN;
+    if (argc > 2)
+        if (atoi(argv[2])<=_SC_NPROCESSORS_ONLN)
+            n_threads = atoi(argv[2]);
+    
     open_matrix ("com-LiveJournal.mat");
 
     double t0 = wall_time();
@@ -51,7 +58,6 @@ int main (int argc, char* argv[])
 
     int iteration = 0;
     int changed = 1;
-    n_threads = sysconf(_SC_NPROCESSORS_ONLN);
 
     n_active = n_nodes;
 
@@ -94,7 +100,7 @@ int main (int argc, char* argv[])
 
         n_active = n_active_next;
 
-        if(!BENCHMARK)
+        if(!bench_active)
             print_update (iteration, n_active);
 
         // Swap active stamps
@@ -104,7 +110,7 @@ int main (int argc, char* argv[])
     }
 
     double t1 = wall_time();
-    if (!BENCHMARK)
+    if (!bench_active)
         printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
     else
         printf ("%lf", t1-t0);
@@ -254,7 +260,7 @@ void open_matrix (char* name)
 
     Mat_Close(matfp);
 
-    if (!BENCHMARK)
+    if (!bench_active)
         printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
 
 }
