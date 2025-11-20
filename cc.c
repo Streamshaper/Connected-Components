@@ -6,63 +6,8 @@
 #include <stdatomic.h>
 #include <unistd.h>
 #include <pthread.h>
-
 #include "cca.h"
 
-// ----------------------------------
-// GLOBAL GRAPH STORAGE
-// ----------------------------------
-int n_nodes;
-int n_elements;
-int* ind_ptr;
-int* indices;
-
-// ----------------------------------
-// RUNTIME CONTROL
-// ----------------------------------
-int n_threads;
-int n_active;
-int bench_active = 0;
-
-volatile int stop_flag = 0;
-_Atomic int work_index;
-
-// ----------------------------------
-// CUSTOM PORTABLE BARRIER
-// ----------------------------------
-typedef struct {
-    pthread_mutex_t mutex;
-    pthread_cond_t  cond;
-    int count;
-    int waiting;
-} my_barrier_t;
-
-void my_barrier_init(my_barrier_t *b, int count) {
-    pthread_mutex_init(&b->mutex, NULL);
-    pthread_cond_init(&b->cond, NULL);
-    b->count   = count;
-    b->waiting = 0;
-}
-
-void my_barrier_wait(my_barrier_t *b) {
-    pthread_mutex_lock(&b->mutex);
-    b->waiting++;
-    if (b->waiting == b->count) {
-        b->waiting = 0;
-        pthread_cond_broadcast(&b->cond);
-    } else {
-        while (pthread_cond_wait(&b->cond, &b->mutex) != 0);
-    }
-    pthread_mutex_unlock(&b->mutex);
-}
-
-// Two global barriers
-my_barrier_t start_barrier;
-my_barrier_t end_barrier;
-
-// ----------------------------------
-// THREAD ARG STRUCT
-// ----------------------------------
 typedef struct {
     int tid;
     int n_threads;
@@ -75,316 +20,247 @@ typedef struct {
     int* next_active;
 
     int iteration;
-
     int local_active_count;
-    unsigned char *local_next_active;   // per-thread buffer
 } thread_data_t;
 
 
-// ----------------------------------
-// TIMING UTILITY
-// ----------------------------------
 double wall_time() {
     struct timeval t;
     gettimeofday(&t, NULL);
     return t.tv_sec + t.tv_usec * 1e-6;
 }
 
+int n_nodes;
+int n_elements;
+int* indices;
+int* ind_ptr;
+int n_active;
+int n_threads;
+int bench_active = 0;
 
-// ----------------------------------
-// FORWARD DECLARATIONS
-// ----------------------------------
-void* worker(void* arg);
-void initialize_labels(int* labels, int* active, int nodes);
-int unique_elements(int* labels);
-void print_update(int iter, int n_active);
-void open_matrix(char* name);
-
-
-// ----------------------------------
-// MAIN
-// ----------------------------------
-int main(int argc, char* argv[])
+int main (int argc, char* argv[])
 {
-    if (argc > 1 && atoi(argv[1]) == 1)
+    if (argc > 1 && atoi(argv[1])==1)
         bench_active = 1;
 
-    n_threads = sysconf(_SC_NPROCESSORS_ONLN);
-    if (argc > 2) {
-        int req = atoi(argv[2]);
-        if (req > 0 && req <= n_threads)
-            n_threads = req;
-    }
-
-    open_matrix("com-LiveJournal.mat");
+    n_threads = _SC_NPROCESSORS_ONLN;
+    if (argc > 2)
+        if (atoi(argv[2])<=_SC_NPROCESSORS_ONLN)
+            n_threads = atoi(argv[2]);
+    
+    open_matrix ("com-LiveJournal.mat");
 
     double t0 = wall_time();
-
-    int* labels      = malloc(n_nodes * sizeof(int));
-    int* active      = malloc(n_nodes * sizeof(int));
-    int* next_active = malloc(n_nodes * sizeof(int));
-
-    memset(next_active, 0, n_nodes * sizeof(int));
+    
+    int* labels = malloc (n_nodes*sizeof(int));  // label of each node
+    int* active = malloc (n_nodes*sizeof(int));  // active nodes
+    int* next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
 
     int iteration = 0;
+    int changed = 1;
+
     n_active = n_nodes;
 
-    initialize_labels(labels, active, n_nodes);
+    initialize_labels (labels, active, n_nodes);
 
-    // Create persistent threads
     pthread_t threads[n_threads];
     thread_data_t td[n_threads];
 
-    my_barrier_init(&start_barrier, n_threads + 1);
-    my_barrier_init(&end_barrier,   n_threads + 1);
-
-    for (int t = 0; t < n_threads; t++)
-    {
-        td[t].tid           = t;
-        td[t].n_threads     = n_threads;
-        td[t].n_nodes       = n_nodes;
-
-        td[t].ind_ptr       = ind_ptr;
-        td[t].indices       = indices;
-        td[t].labels        = labels;
-        td[t].active        = active;
-        td[t].next_active   = next_active;
-
-        td[t].iteration     = iteration;
-        td[t].local_active_count = 0;
-
-        // Allocate private buffer, memset lazily per iteration
-        td[t].local_next_active = malloc(n_nodes);
-        memset(td[t].local_next_active, 0, n_nodes);
-
-        pthread_create(&threads[t], NULL, worker, &td[t]);
-    }
-
-
-
-    // ----------------------------------
-    // MAIN LOOP
-    // ----------------------------------
     while (n_active > 0)
     {
         iteration++;
 
         for (int t = 0; t < n_threads; t++)
         {
-            td[t].iteration     = iteration;
-            td[t].active        = active;
-            td[t].next_active   = next_active;
-            memset(td[t].local_next_active, 0, n_nodes);
+            td[t].tid       = t;
+            td[t].n_threads = n_threads;
+            td[t].n_nodes   = n_nodes;
+
+            td[t].ind_ptr     = ind_ptr;
+            td[t].indices     = indices;
+            td[t].labels      = labels;
+            td[t].active      = active;
+            td[t].next_active = next_active;
+
+            td[t].iteration   = iteration;
         }
 
-        atomic_store(&work_index, 0);
+        // Launch threads
+        for (int t = 0; t < n_threads; t++)
+            pthread_create(&threads[t], NULL, worker, &td[t]);
 
-        my_barrier_wait(&start_barrier);
-        my_barrier_wait(&end_barrier);
+        // Join threads
+        for (int t = 0; t < n_threads; t++)
+            pthread_join(threads[t], NULL);
 
-        // Combine thread-local activity counts
+        // Reduction: count next active nodes
         int n_active_next = 0;
         for (int t = 0; t < n_threads; t++)
             n_active_next += td[t].local_active_count;
 
         n_active = n_active_next;
 
-        if (!bench_active)
-            print_update(iteration, n_active);
+        if(!bench_active)
+            print_update (iteration, n_active);
 
-        // Swap active buffers
-        int* tmp = active;
+        // Swap active stamps
+        int* temp = active;
         active = next_active;
-        next_active = tmp;
-    }
-
-
-    // ----------------------------------
-    // SHUTDOWN
-    // ----------------------------------
-    stop_flag = 1;
-    my_barrier_wait(&start_barrier);
-
-    for (int t = 0; t < n_threads; t++) {
-        pthread_join(threads[t], NULL);
-        free(td[t].local_next_active);
+        next_active = temp;
     }
 
     double t1 = wall_time();
-
     if (!bench_active)
-        printf("Total Connected Components: %d, found in %lf seconds!\n",
-               unique_elements(labels), t1 - t0);
+        printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), t1-t0);
     else
-        printf("%lf", t1 - t0);
+        printf ("%lf", t1-t0);
 
     free(ind_ptr);
     free(indices);
-    free(labels);
     free(active);
     free(next_active);
-
+    free(labels);
+    
     return 0;
 }
 
-
-// ----------------------------------
-// WORKER THREAD
-// ----------------------------------
 void* worker(void* arg)
 {
     thread_data_t* td = (thread_data_t*)arg;
 
-    while (1)
+    int tid       = td->tid;
+    int n_threads = td->n_threads;
+    int n_nodes   = td->n_nodes;
+
+    int chunk = (n_nodes + n_threads - 1) / n_threads;
+    int start_i = tid * chunk;
+    int end_i   = start_i + chunk;
+    if (end_i > n_nodes) end_i = n_nodes;
+
+    td->local_active_count = 0;
+
+    for (int i = start_i; i < end_i; i++)
     {
-        my_barrier_wait(&start_barrier);
+        if (td->active[i] != td->iteration) continue;
 
-        if (stop_flag)
-            break;
+        int s = td->ind_ptr[i];
+        int e = td->ind_ptr[i+1];
+        if (s == e) continue;
 
-        int n_nodes   = td->n_nodes;
-        int iteration = td->iteration;
-        td->local_active_count = 0;
+        int min_label = td->labels[ td->indices[s] ];
 
-        unsigned char *local = td->local_next_active;
-
-        // Parallel for using atomic index
-        int i = atomic_fetch_add(&work_index, 1);
-
-        while (i < n_nodes)
+        for (int k = s + 1; k < e; k++)
         {
-            if (td->active[i] == iteration)
-            {
-                int s = td->ind_ptr[i];
-                int e = td->ind_ptr[i+1];
-
-                if (s != e)
-                {
-                    int min_label = td->labels[ td->indices[s] ];
-
-                    for (int k = s + 1; k < e; k++)
-                    {
-                        int lbl = td->labels[td->indices[k]];
-                        if (lbl < min_label)
-                            min_label = lbl;
-                    }
-
-                    if (min_label < td->labels[i])
-                    {
-                        td->labels[i] = min_label;
-
-                        for (int k = s; k < e; k++)
-                        {
-                            int nb = td->indices[k];
-                            if (!local[nb])
-                            {
-                                local[nb] = 1;
-                                td->local_active_count++;
-                            }
-                        }
-                    }
-                }
-            }
-
-            i = atomic_fetch_add(&work_index, 1);
+            int l = td->labels[ td->indices[k] ];
+            if (l < min_label)
+                min_label = l;
         }
 
-        // Merge into shared next_active buffer
-        for (int j = 0; j < n_nodes; j++)
-            if (local[j])
-                td->next_active[j] = iteration + 1;
+        if (min_label < td->labels[i])
+        {
+            td->labels[i] = min_label;
 
-        my_barrier_wait(&end_barrier);
+            for (int k = s; k < e; k++)
+            {
+                int nb = td->indices[k];
+
+                if (td->next_active[nb] != td->iteration + 1)
+                {
+                    td->next_active[nb] = td->iteration + 1;
+                    td->local_active_count++;
+                }
+            }
+        }
     }
 
     return NULL;
 }
 
-
-// ----------------------------------
-// INITIALIZATION
-// ----------------------------------
-void initialize_labels(int* labels, int* active, int nodes)
+void initialize_labels (int* labels,int* active, int nodes)
 {
-    for (int i = 0; i < nodes; i++)
-    {
-        labels[i] = i + 1;
+    for (int i=0; i<nodes; i++)
+    {    
+        labels[i] = i+1;
         active[i] = 1;
     }
 }
 
-
-// ----------------------------------
-// COUNT UNIQUE LABELS
-// ----------------------------------
-int unique_elements(int* labels)
+int get_elements_from_array (int* array, int array_size)
 {
     int sum = 0;
-    int *temp = malloc(n_nodes * sizeof(int));
+
+    for (int q=0; q<array_size; q++)
+        if (array[q] != 0) 
+            sum++;
+
+    return sum;
+}
+
+void print_update (int iter, int n_active)
+{
+    printf("Iteration: %d || ", iter);
+    printf("Still Active: %d nodes.", n_active);
+    printf ("\n");
+}
+
+int unique_elements (int* labels)
+{
+    int sum = 0;
+    int *temp = malloc (n_nodes*sizeof(int));
     int found = 0;
 
     temp[0] = labels[0];
     sum++;
 
-    for (int k = 1; k < n_nodes; k++)
-    {
+    for (int k=1; k<n_nodes; k++)
+    {    
         found = 0;
-        for (int l = 0; l < sum; l++)
-            if (temp[l] == labels[k]) {
+        for (int l=0; l<sum; l++)
+            if (temp[l] == labels[k])
+            {
                 found = 1;
-                break;
+                l=sum;
             }
         if (!found)
-            temp[sum++] = labels[k];
+        {
+            temp[sum] = labels[k];
+            sum++;
+        }
     }
-
-    free(temp);
+    free (temp);
     return sum;
+            
 }
 
-
-// ----------------------------------
-// PRINT ITERATION STATUS
-// ----------------------------------
-void print_update(int iter, int n_active)
-{
-    printf("Iteration: %d || Still Active: %d nodes.\n", iter, n_active);
-}
-
-
-// ----------------------------------
-// LOAD MATRIX MARKET FILE
-// ----------------------------------
-void open_matrix(char* name)
+void open_matrix (char* name)
 {
     mat_t *matfp = Mat_Open(name, MAT_ACC_RDONLY);
     if (!matfp) { fprintf(stderr,"Cannot open file\n"); exit(2); }
 
     matvar_t *problem = Mat_VarRead(matfp, "Problem");
-    if (!problem || problem->class_type != MAT_C_STRUCT)
-        { fprintf(stderr,"Problem struct missing\n"); exit(2); }
+    if (!problem || problem->class_type != MAT_C_STRUCT) { fprintf(stderr,"Problem struct missing\n"); exit(2); }
 
     matvar_t *Avar = Mat_VarGetStructFieldByName(problem, "A", 0);
-    if (!Avar || Avar->class_type != MAT_C_SPARSE)
-        { fprintf(stderr,"A is not sparse\n"); exit(2); }
+    if (!Avar || Avar->class_type != MAT_C_SPARSE) { fprintf(stderr,"A is not sparse\n"); exit(2); }
 
     mat_sparse_t *A = (mat_sparse_t*)Avar->data;
     size_t m = Avar->dims[0], n = Avar->dims[1], nnz = A->nzmax;
 
-    indices = malloc(nnz * sizeof(int));
-    ind_ptr = malloc((n + 1) * sizeof(int));
+    indices = malloc (nnz*sizeof(int));
+    ind_ptr = malloc (n*sizeof(int));
 
-    for (size_t q = 0; q < nnz; q++)
+    for (size_t q=0; q<nnz; q++)
         indices[q] = (int)A->ir[q];
 
-    for (size_t q = 0; q < n + 1; q++)
+    for (size_t q=0; q<n; q++)
         ind_ptr[q] = (int)A->jc[q];
 
-    n_nodes    = n;
-    n_elements = nnz / 2;
+    n_nodes = n;
+    n_elements = nnz/2;
 
     Mat_Close(matfp);
 
     if (!bench_active)
-        printf("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
+        printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
+
 }
