@@ -62,6 +62,8 @@ int main (int argc, char* argv[])
     n_active = n_nodes;
 
     initialize_labels (labels, active, n_nodes);
+    for (int p=0; p<n_nodes; p++)
+        next_active[p] = 0;
 
     pthread_t threads[n_threads];
     thread_data_t td[n_threads];
@@ -143,13 +145,13 @@ void* worker(void* arg)
     {
         if (td->active[i] != td->iteration) continue;
 
-        int s = td->ind_ptr[i];
-        int e = td->ind_ptr[i+1];
-        if (s == e) continue;
+        int start = td->ind_ptr[i];
+        int end = td->ind_ptr[i+1];
+        if (start == end) continue;
 
-        int min_label = td->labels[ td->indices[s] ];
+        int min_label = td->labels[ td->indices[start] ];
 
-        for (int k = s + 1; k < e; k++)
+        for (int k = start + 1; k < end; k++)
         {
             int l = td->labels[ td->indices[k] ];
             if (l < min_label)
@@ -160,7 +162,7 @@ void* worker(void* arg)
         {
             td->labels[i] = min_label;
 
-            for (int k = s; k < e; k++)
+            for (int k = start; k < end; k++)
             {
                 int nb = td->indices[k];
 
@@ -247,12 +249,12 @@ void open_matrix (char* name)
     size_t m = Avar->dims[0], n = Avar->dims[1], nnz = A->nzmax;
 
     indices = malloc (nnz*sizeof(int));
-    ind_ptr = malloc (n*sizeof(int));
+    ind_ptr = malloc ((n+1)*sizeof(int));
 
     for (size_t q=0; q<nnz; q++)
         indices[q] = (int)A->ir[q];
 
-    for (size_t q=0; q<n; q++)
+    for (size_t q=0; q<=n; q++)
         ind_ptr[q] = (int)A->jc[q];
 
     n_nodes = n;
