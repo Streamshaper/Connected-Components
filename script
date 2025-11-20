@@ -1,0 +1,31 @@
+#!/bin/bash
+
+if [ $# -lt 2 ]; then
+    echo "Usage: $0 <program> <num_runs>"
+    exit 1
+fi
+
+prog="$1"
+runs="$2"
+
+sum=0
+
+raw=$("$prog" "${@:3}")
+value=$(echo "$raw" | tr -d ',')
+sum=$(echo "$sum + $value" | bc -l)
+min=$value
+
+for ((i=1; i<runs; i++)); do
+    raw=$("$prog" "${@:3}")
+    value=$(echo "$raw" | tr -d ',')
+    sum=$(echo "$sum + $value" | bc -l)
+
+    if (( $(echo "$value < $min" | bc -l) )); then
+        min="$value"
+    fi
+done
+
+average=$(echo "$sum / $runs" | bc -l)
+
+printf "Average: %.3f\n" "$average"
+printf "Min: %.3f\n" "$min"
