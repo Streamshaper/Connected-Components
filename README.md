@@ -5,7 +5,7 @@ OpenCilk should be installed in the system beforehand. Visit the [official site]
 ### Compiling and running the program  
 To create the executable run `make`, to remove it run `make clean`. To create the executable without OpenCilk's cilkscale's capabilities run `make bench`
 
-The correct syntax for running the program is `./cc {mode}`. When mode == 0 the program prints complete update messages regarding the completion of the calculation. When mode == 1, the program restricts all stdout printing, except from the total execution time (in seconds) before terminating. Combine `make` with mode 0 and `make bench` with mode 1, in order to allow or exclude all printouts simultaneously.
+The correct syntax for running the program is `./cc {mode}`. When mode == 0 the program prints complete update messages regarding the completion of the calculation. When mode == 1, the program restricts all stdout printing, except from the total execution time (in seconds) before terminating. Combine `make` with mode 0 and `make bench` with mode 1, in order to allow or exclude all printouts simultaneously.  
 Example: `make bench`, then `./cc 1` runs in "benchmark mode".  
 Example: `make`, then `./cc 0` prints updates about the calculation progress and after completion shows metrics relevant to parallelism a) for the while loop b)for the whole program.
 
