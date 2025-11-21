@@ -3,15 +3,8 @@
 #include <string.h>
 #include <sys/time.h>
 #include <matio.h>
-#include <stdatomic.h>
 #include "cca.h"
 #include <omp.h>
-
-double wall_time() {
-    struct timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec + t.tv_usec * 1e-6;
-}
 
 int n_nodes;
 int n_elements;
@@ -25,16 +18,15 @@ int main (int argc, char* argv[])
     if (argc > 1 && atoi(argv[1])==1)
         bench_active = 1;
 
-    open_matrix ("com-LiveJournal.mat"); // Check, missing free
+    open_matrix ("matrix.mat");
 
     double t0 = wall_time();
     
-    int* labels = malloc (n_nodes*sizeof(int));  // label of each node
-    int* active = malloc (n_nodes*sizeof(int));  // active nodes
-    int* next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
+    int* labels = malloc (n_nodes*sizeof(int));      // Label of each node
+    int* active = malloc (n_nodes*sizeof(int));      // Active nodes
+    int* next_active = malloc (n_nodes*sizeof(int)); // Nodes that need to be woken up
 
     int iteration = 0;
-    int changed = 1;
 
     n_active = n_nodes;
 
@@ -84,7 +76,7 @@ int main (int argc, char* argv[])
         if (!bench_active)
             print_update (iteration, n_active);
 
-        // Swap
+
         int* temp = active;
         active = next_active;
         next_active = temp;
@@ -163,6 +155,12 @@ int unique_elements (int* labels)
             
 }
 
+double wall_time() {
+    struct timeval t;
+    gettimeofday(&t, NULL);
+    return t.tv_sec + t.tv_usec * 1e-6;
+}
+
 void open_matrix (char* name)
 {
     mat_t *matfp = Mat_Open(name, MAT_ACC_RDONLY);
@@ -178,12 +176,12 @@ void open_matrix (char* name)
     size_t m = Avar->dims[0], n = Avar->dims[1], nnz = A->nzmax;
 
     indices = malloc (nnz*sizeof(int));
-    ind_ptr = malloc (n*sizeof(int));
+    ind_ptr = malloc ((n+1)*sizeof(int));
 
     for (size_t q=0; q<nnz; q++)
         indices[q] = (int)A->ir[q];
 
-    for (size_t q=0; q<n; q++)
+    for (size_t q=0; q<=n; q++)
         ind_ptr[q] = (int)A->jc[q];
         
     n_nodes = n;

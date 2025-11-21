@@ -19,7 +19,8 @@
         "span": "c",
         "regex": "c",
         "valarray": "c",
-        "*.inc": "c"
+        "*.inc": "c",
+        "matio.h": "c"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/gcc"
     
