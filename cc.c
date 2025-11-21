@@ -16,13 +16,13 @@ int main (int argc, char* argv[])
     if (argc > 1 && atoi(argv[1]) == 1)
         bench_active = 1;
 
-    open_matrix ("com-LiveJournal.mat");
+    open_matrix ("matrix.mat");
 
     clock_t zero_t = clock();
 
-    int *labels = malloc (n_nodes*sizeof(int));  // label of each node
-    int *active = malloc (n_nodes*sizeof(int));  // active nodes
-    int *next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
+    int *labels = malloc (n_nodes*sizeof(int));         // Label of each node
+    int *active = malloc (n_nodes*sizeof(int));         // Active nodes
+    int *next_active = malloc (n_nodes*sizeof(int));    // Nodes that need to be woken up
    
     int min_label, start, end;
     int iteration = 0;
@@ -66,7 +66,7 @@ int main (int argc, char* argv[])
         active = next_active;
         next_active = temp;
 
-        reinitialize_matrices(next_active, n_nodes);  // once per iteration, compare with iteration number don't initialize (idea)
+        reinitialize_matrices(next_active, n_nodes);
     }
 
     if (!bench_active)
@@ -161,12 +161,12 @@ void open_matrix (char* name)
     size_t m = Avar->dims[0], n = Avar->dims[1], nnz = A->nzmax;
 
     indices = malloc (nnz*sizeof(int));
-    ind_ptr = malloc (n*sizeof(int));
+    ind_ptr = malloc ((n+1)*sizeof(int));
 
     for (size_t q=0; q<nnz; q++)
         indices[q] = (int)A->ir[q];
 
-    for (size_t q=0; q<n; q++)
+    for (size_t q=0; q<=n; q++)
         ind_ptr[q] = (int)A->jc[q];
         
     n_nodes = n;
