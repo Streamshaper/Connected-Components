@@ -12,23 +12,14 @@ typedef struct {
     int tid;
     int n_threads;
     int n_nodes;
-
     int* ind_ptr;
     int* indices;
     int* labels;
     int* active;
     int* next_active;
-
     int iteration;
     int local_active_count;
 } thread_data_t;
-
-
-double wall_time() {
-    struct timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec + t.tv_usec * 1e-6;
-}
 
 int n_nodes;
 int n_elements;
@@ -48,22 +39,18 @@ int main (int argc, char* argv[])
         if (atoi(argv[2])<=_SC_NPROCESSORS_ONLN)
             n_threads = atoi(argv[2]);
     
-    open_matrix ("com-LiveJournal.mat");
+    open_matrix ("matrix.mat");
 
     double t0 = wall_time();
     
-    int* labels = malloc (n_nodes*sizeof(int));  // label of each node
-    int* active = malloc (n_nodes*sizeof(int));  // active nodes
-    int* next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
+    int* labels = malloc (n_nodes*sizeof(int));         // Label of each node
+    int* active = malloc (n_nodes*sizeof(int));         // Active nodes
+    int* next_active = malloc (n_nodes*sizeof(int));    // Nodes that need to be woken up in the next iteration
 
-    int iteration = 0;
-    int changed = 1;
-
+    int iteration = 0;  // Iteration counter
     n_active = n_nodes;
 
-    initialize_labels (labels, active, n_nodes);
-    for (int p=0; p<n_nodes; p++)
-        next_active[p] = 0;
+    initialize_labels (labels, active, next_active, n_nodes);
 
     pthread_t threads[n_threads];
     thread_data_t td[n_threads];
@@ -77,35 +64,30 @@ int main (int argc, char* argv[])
             td[t].tid       = t;
             td[t].n_threads = n_threads;
             td[t].n_nodes   = n_nodes;
-
             td[t].ind_ptr     = ind_ptr;
             td[t].indices     = indices;
+
             td[t].labels      = labels;
             td[t].active      = active;
             td[t].next_active = next_active;
-
             td[t].iteration   = iteration;
         }
 
-        // Launch threads
         for (int t = 0; t < n_threads; t++)
             pthread_create(&threads[t], NULL, worker, &td[t]);
 
-        // Join threads
         for (int t = 0; t < n_threads; t++)
             pthread_join(threads[t], NULL);
 
-        // Reduction: count next active nodes
         int n_active_next = 0;
         for (int t = 0; t < n_threads; t++)
-            n_active_next += td[t].local_active_count;
+            n_active_next += td[t].local_active_count;      // Overestimation of n_active_next
 
         n_active = n_active_next;
 
         if(!bench_active)
             print_update (iteration, n_active);
 
-        // Swap active stamps
         int* temp = active;
         active = next_active;
         next_active = temp;
@@ -178,12 +160,13 @@ void* worker(void* arg)
     return NULL;
 }
 
-void initialize_labels (int* labels,int* active, int nodes)
+void initialize_labels (int* labels, int* active, int* next_active, int nodes)
 {
     for (int i=0; i<nodes; i++)
     {    
         labels[i] = i+1;
         active[i] = 1;
+        next_active[i] = 0;
     }
 }
 
@@ -232,6 +215,12 @@ int unique_elements (int* labels)
     free (temp);
     return sum;
             
+}
+
+double wall_time() {
+    struct timeval t;
+    gettimeofday(&t, NULL);
+    return t.tv_sec + t.tv_usec * 1e-6;
 }
 
 void open_matrix (char* name)

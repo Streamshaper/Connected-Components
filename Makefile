@@ -1,4 +1,4 @@
-CFLAGS = -std=gnu99 -O3 
+CFLAGS = -pthread -O3 
 LDLIBS = -lm -lmatio
 
 all: cc
