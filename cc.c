@@ -4,18 +4,11 @@
 #include <sys/time.h>
 #include <matio.h>
 #include <cilk/cilk.h>
-#include <stdatomic.h>
 #include "cca.h"
 #include <cilk/cilkscale.h> // Used for benchmarking
 #include <cilk/cilk_api.h>
 
 #define GRAIN 1024
-
-double wall_time() {
-    struct timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec + t.tv_usec * 1e-6;
-}
 
 int n_nodes;
 int n_elements;
@@ -32,16 +25,15 @@ int main (int argc, char* argv[])
     if (argc > 1 && atoi(argv[1])==1)
         bench_active = 1;
 
-    open_matrix ("com-LiveJournal.mat");
+    open_matrix ("matrix.mat");
     
     double t0 = wall_time();
 
-    int* labels = malloc (n_nodes*sizeof(int));  // label of each node
-    int* active = malloc (n_nodes*sizeof(int));  // active nodes
-    int* next_active = malloc (n_nodes*sizeof(int)); // nodes that need to be woken up
+    int* labels = malloc (n_nodes*sizeof(int));         // Label of each node
+    int* active = malloc (n_nodes*sizeof(int));         // Active nodes
+    int* next_active = malloc (n_nodes*sizeof(int));    // Nodes that need to be woken up
 
     int iteration = 0;
-    int changed = 1;
 
     n_active = n_nodes;
     
@@ -54,9 +46,7 @@ int main (int argc, char* argv[])
     {
         iteration++;
 
-        memset(next_active, 0, n_nodes * sizeof(*next_active)); // presumably faster than for and cilk_for
-
-
+        memset(next_active, 0, n_nodes * sizeof(*next_active));     // Presumably faster than for and cilk_for
 
         cilk_for (int block = 0; block < n_nodes; block += GRAIN) 
         {
@@ -85,7 +75,7 @@ int main (int argc, char* argv[])
                 {
                     labels[i] = min_label;
                     for (int k=start; k<end; k++)
-                        if (!next_active[indices[k]])   // reduces cache-line ping-pong
+                        if (!next_active[indices[k]])   // reduces cache-line ping-pong, compared to always writing
                             next_active[indices[k]] = 1; 
                 }
             }
@@ -172,6 +162,12 @@ int unique_elements (int* labels)
     }
     return sum;
             
+}
+
+double wall_time() {
+    struct timeval t;
+    gettimeofday(&t, NULL);
+    return t.tv_sec + t.tv_usec * 1e-6;
 }
 
 void open_matrix (char* name)

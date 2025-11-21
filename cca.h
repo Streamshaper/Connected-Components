@@ -9,6 +9,8 @@ int get_elements_from_array (int* array, int array_size);
 
 int unique_elements (int* labels);
 
+double wall_time();
+
 void open_matrix (char* name);
 
 #endif
