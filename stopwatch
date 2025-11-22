@@ -15,7 +15,8 @@ value=$(echo "$raw" | tr -d ',')
 sum=$(echo "$sum + $value" | bc -l)
 min=$value
 
-for ((i=1; i<runs; i++)); do
+for ((i=1; i<=runs; i++)); do
+    echo "Run $i..."
     raw=$("$prog" "${@:3}")
     value=$(echo "$raw" | tr -d ',')
     sum=$(echo "$sum + $value" | bc -l)
@@ -27,5 +28,5 @@ done
 
 average=$(echo "$sum / $runs" | bc -l)
 
-printf "Average: %.3f\n" "$average"
-printf "Min: %.3f\n" "$min"
+printf "Average calculation time: %.3f\n" "$average"
+printf "Minimum calculation time: %.3f\n" "$min"
