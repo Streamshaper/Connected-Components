@@ -172,6 +172,6 @@ void open_matrix (char* name)
 
     Mat_Close(matfp);
     if (!bench_active)
-        printf ("The graph has %d nodes and %d elements in total.\n", n_nodes, (int)nnz/2);
+        printf ("The graph has %d nodes and %d edges in total.\n", n_nodes, (int)nnz/2);
 
 }
