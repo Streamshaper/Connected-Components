@@ -1,0 +1,37 @@
+#!/bin/bash
+
+if [ $# -lt 2 ]; then
+    echo "Usage: $0 <program> <runs> [program args...]"
+    exit 1
+fi
+
+program="$1"
+runs="$2"
+shift 2
+prog_args=("$@")
+
+total_cpu=0
+total_rss=0
+total_vol_ctx=0
+
+for ((i=1; i<=runs; i++)); do
+    echo "Run $i..."
+    output=$( /usr/bin/time -v "$program" "${prog_args[@]}" \
+              2>&1 >/dev/null )
+
+    cpu=$(echo "$output" | awk -F': ' '/Percent of CPU/ {print $2}' | tr -d '%')
+    rss=$(echo "$output" | awk -F': ' '/Maximum resident set size/ {print $2}')
+    vol_ctx=$(echo "$output" | awk -F': ' '/Voluntary context switches/ {print $2}')
+
+    total_cpu=$(printf "%.2f" "$(echo "$total_cpu + $cpu" | bc)")
+    total_rss=$((total_rss + rss))
+    total_vol_ctx=$((total_vol_ctx + vol_ctx))
+done
+
+avg_cpu=$(printf "%.2f" "$(echo "$total_cpu / $runs" | bc -l)")
+avg_rss=$((total_rss / runs))
+avg_vol_ctx=$((total_vol_ctx / runs))
+
+echo "Average CPU Utilization: $avg_cpu%"
+echo "Average Max RSS: ${avg_rss} KB"
+echo "Average Voluntary Context Switches: $avg_vol_ctx"
