@@ -8,7 +8,8 @@ These libraries are required: libc, libmatio. GCC installation usually includes 
 To create the executable run `make`, to remove it run `make clean`.
 
 The correct syntax for running the program is `./cc {mode}`. When mode == 0 the program prints complete update messages regarding the completion of the calculation. When mode == 1, the program restricts all stdout printing, except from the total execution time (in seconds) before terminating.  
-Example: `./cc 1` runs in "benchmark mode".
+Example: `./cc 1` runs in "benchmark mode".  
+Example: `./cc 0` prints updates about the calculation progress.
 
 ### Measuring Performance
 In order to calculate and print the average and minimum execution time of the program throughout a set of runs, use `./stopwatch`. Full syntax: `./stopwatch ./cc {num_of_runs} 1`. Moreover, averaged CPU Utilization, maximum resident set size and voluntary context switches can be printed using `./metrics`. Full syntax: `./metrics ./cc {num_of_runs} 1`. Example: `./stopwatch ./cc 100 1` will output the average and minimum execution time for 100 runs.
