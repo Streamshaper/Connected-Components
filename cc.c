@@ -6,7 +6,6 @@
 #include "cca.h"
 
 int n_nodes;
-int n_elements;
 int* indices;
 int* ind_ptr;
 int bench_active = 0;
@@ -170,10 +169,9 @@ void open_matrix (char* name)
         ind_ptr[q] = (int)A->jc[q];
         
     n_nodes = n;
-    n_elements = nnz/2;
 
     Mat_Close(matfp);
     if (!bench_active)
-        printf ("The graph has %d nodes and %d elements in total.\n", n_nodes, n_elements);
+        printf ("The graph has %d nodes and %d elements in total.\n", n_nodes, (int)nnz/2);
 
 }
