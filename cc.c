@@ -11,7 +11,6 @@
 #define GRAIN 1024
 
 int n_nodes;
-int n_elements;
 int* indices;
 int* ind_ptr;
 int n_active;
@@ -92,11 +91,11 @@ int main (int argc, char* argv[])
     if (!bench_active)
     {
         end = wsp_getworkspan();
-        wsp_dump(wsp_sub(end, start), "my computation");
+        wsp_dump(wsp_sub(end, start), "While loop");
     }
 
     if(!bench_active)
-        printf ("Total Connected Components: %d, found in %lf seconds!\n", unique_elements(labels), wall_time()-t0);
+        printf ("Total Connected Components: %d, found in %lf seconds!\nProgram", unique_elements(labels), wall_time()-t0);
     else
         printf ("%lf", wall_time()-t0);
 
@@ -194,11 +193,10 @@ void open_matrix (char* name)
         ind_ptr[q] = (int)A->jc[q];
         
     n_nodes = n;
-    n_elements = nnz/2;
 
     Mat_Close(matfp);
 
     if (!bench_active)
-        printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
+        printf ("Loaded matrix with %d nodes and %d edges.\n", n_nodes, (int)nnz/2);
 
 }
