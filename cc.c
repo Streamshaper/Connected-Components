@@ -7,7 +7,6 @@
 #include <omp.h>
 
 int n_nodes;
-int n_elements;
 int* indices;
 int* ind_ptr;
 int n_active;
@@ -185,11 +184,10 @@ void open_matrix (char* name)
         ind_ptr[q] = (int)A->jc[q];
         
     n_nodes = n;
-    n_elements = nnz/2;
 
     Mat_Close(matfp);
 
     if (!bench_active)
-        printf ("Loaded matrix with %d nodes and %d elements.\n", n_nodes, n_elements);
+        printf ("Loaded matrix with %d nodes and %d edges.\n", n_nodes, (int)nnz/2);
 
 }
