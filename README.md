@@ -11,4 +11,8 @@ Example: `./cc 0` prints updates about the calculation progress.
 
 In order to run the program on x threads run `OMP_NUM_THREADS=x`.
 
-In order to calculate and print the average and minimum execution time of the program throughout a set of runs, use `./script`. Full syntax: `OMP_NUM_THREADS={num_of_threads} ./script ./cc {num_of_runs} 1`.
+### Measuring Performance
+In order to calculate and print the average and minimum execution time of the program throughout a set of runs, use `./stopwatch`. Full syntax: `OMP_NUM_THREADS={num_of_threads} ./stopwatch ./cc {num_of_runs} 1`. Moreover, averaged CPU Utilization, maximum resident set size and voluntary context switches can be printed using `./metrics`. Full syntax: `OMP_NUM_THREADS={num_of_threads} ./metrics ./cc {num_of_runs} 1`. Example: `OMP_NUM_THREADS=2 ./stopwatch ./cc 100 1` will output the average and minimum execution time for 100 runs on 2 threads.
+
+### Notes
+The time that the program reports as execution time is the calculation time; the initial loading of the matrix in memory is not taken into account.
