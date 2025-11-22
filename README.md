@@ -8,4 +8,8 @@ To create the executable run `make`, to remove it run `make clean`.
 The correct syntax for running the program is `./cc {mode} {num_threads}`. When mode == 0 the program prints complete update messages regarding the completion of the calculation. When mode == 1, the program restricts all stdout printing, except from the total execution time (in seconds) before terminating. num_threads should be set to the number of threads that should be spawned simultaneously during execution.  
 Example: `./cc 1 4` runs in "benchmark mode" on 4 threads.
 
-In order to calculate and print the average and minimum execution time of the program throughout a set of runs, use `./script`. Full syntax: `./script ./cc {num_of_runs} 1 {num_threads}`.
+### Measuring Performance
+In order to calculate and print the average and minimum execution time of the program throughout a set of runs, use `./stopwatch`. Full syntax: `./stopwatch ./cc {num_of_runs} 1 {num_of_threads}`. Moreover, averaged CPU Utilization, maximum resident set size and voluntary context switches can be printed using `./metrics`. Full syntax: `./metrics ./cc {num_of_runs} 1 {num_of_threads}`. Example: `./stopwatch ./cc 100 1 4` will output the average and minimum execution time for 100 runs on 4 threads.
+
+### Notes
+The time that the program reports as execution time is the calculation time; the initial loading of the matrix in memory is not taken into account.
